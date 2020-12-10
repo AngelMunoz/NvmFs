@@ -6,13 +6,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Common.fs" />
+    <Compile Include="IO.fs" />
+    <Compile Include="Network.fs" />
+    <Compile Include="Cmd.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CliWrap" Version="3.2.4" />
+    <PackageReference Include="CommandLineParser" Version="2.8.0" />
+    <PackageReference Include="CommandLineParser.FSharp" Version="2.8.0" />
     <PackageReference Include="Ply" Version="0.3.1" />
     <PackageReference Include="sharpcompress" Version="0.26.0" />
+    <PackageReference Include="Spectre.Console" Version="0.33.0" />
+    <PackageReference Include="Thoth.Json.Net" Version="5.0.0" />
   </ItemGroup>
 
 </Project>
