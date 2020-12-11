@@ -9,6 +9,7 @@
     <Compile Include="Common.fs" />
     <Compile Include="IO.fs" />
     <Compile Include="Network.fs" />
+    <Compile Include="Env.fs" />
     <Compile Include="Cmd.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
