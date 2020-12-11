@@ -12,9 +12,10 @@ open CliWrap.Buffered
 open Thoth.Json.Net
 open FSharp.Control.Tasks
 open Spectre.Console
+open System.Threading.Tasks
 
 module IO =
-    let createSymlink (symbolicLink: string) (actualPath: string) =
+    let createSymlink (actualPath: string) (symbolicLink: string) =
         if (RuntimeInformation.IsOSPlatform OSPlatform.Linux
             || RuntimeInformation.IsOSPlatform OSPlatform.OSX) then
             let symbolicLinkDirectory = Path.GetDirectoryName(symbolicLink)
@@ -34,10 +35,8 @@ module IO =
                 |> Async.RunSynchronously
 
             if result.ExitCode <> 0
-            then AnsiConsole.MarkupLine
-                     $"[#d78700]Error while creating symlinks[/]:\n[#ff8700]{result.StandardError}[/]"
-
-            ()
+            then Result.Error $"[#d78700]Error while creating symlinks[/]:\n[#ff8700]{result.StandardError}[/]"
+            else Ok()
         else
 
         if (RuntimeInformation.IsOSPlatform OSPlatform.Windows) then
@@ -58,12 +57,53 @@ module IO =
                 |> Async.RunSynchronously
 
             if result.ExitCode <> 0
-            then eprintfn "Error while creating symlinks:\n%s" result.StandardError
-
-            ()
+            then Result.Error $"[#d78700]Error while creating symlinks[/]:\n[#ff8700]{result.StandardError}[/]"
+            else Ok()
         else
-            printfn
+            Result.Error
                 $"Could not write symlink {symbolicLink} -> {actualPath}, for more information please see https://github.com/dotnet/runtime/issues/24271"
+
+    let trySetPermissionsUnix (dir: string) =
+        task {
+            let! dirPerm =
+                Cli
+                    .Wrap("chmod")
+                    .WithArguments($"-R +x {dir}")
+                    .WithValidation(CommandResultValidation.None)
+                    .ExecuteBufferedAsync()
+                    .Task
+
+            let childPerm =
+                let dirs = Directory.EnumerateFiles(dir)
+
+                dirs
+                |> Seq.map
+                    (fun file ->
+                        Cli
+                            .Wrap("chmod")
+                            .WithArguments($"+x {file}")
+                            .ExecuteBufferedAsync()
+                            .Task)
+
+            let! children = Task.WhenAll(childPerm)
+
+            let exitCodes =
+                children
+                |> Seq.fold (fun value result -> result.ExitCode + value) 0
+
+            let errors =
+                [ dirPerm.StandardError
+                  yield! children |> Seq.map (fun res -> res.StandardError) ]
+
+            return
+                {| ExitCode = dirPerm.ExitCode + exitCodes
+                   Errors = errors |}
+        }
+
+    let private symLinkDelegate (symbolicLink: string) (actualPath: string) =
+        match createSymlink actualPath symbolicLink with
+        | Ok () -> ()
+        | Error err -> AnsiConsole.MarkupLine err
 
     let extractContents (os: string) (source: string) (output: string) =
         match os with
@@ -75,7 +115,7 @@ module IO =
             let opts = ExtractionOptions()
             opts.ExtractFullPath <- true
             opts.Overwrite <- true
-            opts.WriteSymbolicLink <- new ExtractionOptions.SymbolicLinkWriterDelegate(createSymlink)
+            opts.WriteSymbolicLink <- new ExtractionOptions.SymbolicLinkWriterDelegate(symLinkDelegate)
             reader.WriteAllToDirectory(output, opts)
 
     let getChecksumForFile (file: string) =
@@ -102,7 +142,9 @@ module IO =
 
         Directory.CreateDirectory(dir)
 
-    let rec private deleteDirs (path: string) =
+    let deleteFile (path: string) = File.Delete(path)
+
+    let rec deleteDirs (path: string) =
         let dir = DirectoryInfo(path)
         let dirs = dir.EnumerateDirectories(path)
 
@@ -159,3 +201,12 @@ module IO =
         // if we find the line get the checksum which should be the first item
         |> Option.map (fun l -> l.Split(' ') |> Array.tryHead)
         |> Option.flatten
+
+    let appendToBashRc (lines: string list) =
+        let path =
+            fullPath (Environment.GetFolderPath(Environment.SpecialFolder.Personal), [ ".bashrc" ])
+
+        use file = File.AppendText(path)
+
+        for line in lines do
+            file.WriteLine(line)

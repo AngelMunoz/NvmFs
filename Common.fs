@@ -56,6 +56,9 @@ module Common =
         let NvmFsHome = "NVMFS_HOME"
 
         [<Literal>]
+        let NvmFsNode = "NVMFS_NODE"
+
+        [<Literal>]
         let NvmSourceBaseUrl = "NVM_SOURCE_BASE_URL"
 
     let getVersionCodename (version: string) = $"{version.Split('.').[0]}.x"

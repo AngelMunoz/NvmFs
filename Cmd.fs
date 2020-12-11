@@ -151,12 +151,40 @@ module Actions =
 
                             AnsiConsole.MarkupLine $"[#5f5f00]Extracting[/]: {what} to {target}"
 
-                            IO.extractContents
-                                os
-                                node
-                                (IO.removeExtension (IO.fullPath (Common.getHome (), [ $"latest-{codename}" ])))
+                            IO.extractContents os node (IO.fullPath (Common.getHome (), [ $"latest-{codename}" ]))
 
                             AnsiConsole.MarkupLine "[green]Extraction Complete![/]"
+                            IO.deleteFile node
+
+                            let directory =
+                                $"node-%s{version.version}-%s{os}-%s{arch}"
+
+                            let symlinkpath =
+                                IO.fullPath
+                                    (Common.getHome (),
+                                     [ $"latest-{codename}"
+                                       $"{directory}"
+                                       if os = "win" then "" else "bin" ])
+
+                            match Env.setEnvVersion os symlinkpath with
+                            | Ok _ ->
+                                AnsiConsole.MarkupLine("[yellow]Setting permissions for node[/]")
+
+                                match os with
+                                | "win" -> ()
+                                | _ ->
+                                    let! result = IO.trySetPermissionsUnix symlinkpath
+
+                                    if result.ExitCode <> 0 then
+                                        let errors =
+                                            result.Errors
+                                            |> List.fold (fun value next -> $"{value}\n{next}") ""
+
+                                        AnsiConsole.WriteLine $"[red]Error while setting permissions[/]: {errors}"
+
+                                AnsiConsole.MarkupLine $"[bold green]Node version installed correctly[/]"
+                            | Error err -> AnsiConsole.MarkupLine err
+
                             return 0
                     | None ->
                         AnsiConsole.MarkupLine
