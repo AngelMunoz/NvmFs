@@ -94,47 +94,20 @@ module Actions =
             Result.Error
                 $"Use only one of --{nameof options.lts}, --{nameof options.current}, or --{nameof options.version}"
 
-
-    let private getVersionItem (versions: NodeVerItem []) (install: InstallType) =
-        match install with
-        | LTS ->
-            versions
-            |> Array.choose (fun version -> if version.lts.IsSome then Some version else None)
-            |> Array.tryHead
-        | Current -> versions |> Array.tryHead
-        | SpecificM major ->
-            let major =
-                if major.ToLowerInvariant().StartsWith('v') then major else $"v{major}"
-
-            versions
-            |> Array.tryFind (fun ver -> ver.version.StartsWith($"{major}."))
-        | SpecificMM (major, minor) ->
-            let major =
-                if major.ToLowerInvariant().StartsWith('v') then major else $"v{major}"
-
-            versions
-            |> Array.tryFind (fun ver -> ver.version.StartsWith($"{major}.{minor}."))
-        | SpecificMMP (major, minor, patch) ->
-            let major =
-                if major.ToLowerInvariant().StartsWith('v') then major else $"v{major}"
-
-            versions
-            |> Array.tryFind (fun ver -> ver.version.Contains($"{major}.{minor}.{patch}"))
-
-    let private runPreChecks () =
+    let private runPreInstallChecks () =
         let homedir = IO.createHomeDir ()
         AnsiConsole.MarkupLine("[bold yellow]Updating node versions[/]")
 
         task {
             let! file = Network.downloadNodeVersions (homedir.FullName)
-            AnsiConsole.MarkupLine($"[green]Updated node versions to {file}[/]")
+            AnsiConsole.MarkupLine($"[green]Updated node versions on {file}[/]")
         }
         :> Task
 
 
     let Install (options: Install) =
         task {
-            do! runPreChecks ()
+            do! runPreInstallChecks ()
 
             let! versions = IO.getIndex ()
 
@@ -142,7 +115,7 @@ module Actions =
                   (Option.ofNullable options.isDefault
                    |> Option.defaultValue false) with
             | Ok install, setAsDefault ->
-                let version = getVersionItem versions install
+                let version = Common.getVersionItem versions install
 
                 match version with
                 | Some version ->
@@ -196,7 +169,6 @@ module Actions =
             | Result.Error err, _ ->
                 AnsiConsole.MarkupLine $"[bold red]{err}[/]"
                 return 1
-
         }
 
 

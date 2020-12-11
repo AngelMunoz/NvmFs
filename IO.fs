@@ -102,11 +102,6 @@ module IO =
 
         Directory.CreateDirectory(dir)
 
-    let createTmpDir () =
-        let dir = NvmFs.Common.getDownloadTmpDir ()
-
-        Directory.CreateDirectory(dir)
-
     let rec private deleteDirs (path: string) =
         let dir = DirectoryInfo(path)
         let dirs = dir.EnumerateDirectories(path)
@@ -119,10 +114,6 @@ module IO =
 
     let removeHomeDir () =
         let dir = NvmFs.Common.getHome ()
-        deleteDirs dir
-
-    let removeTmpDir () =
-        let dir = NvmFs.Common.getDownloadTmpDir ()
         deleteDirs dir
 
     let fullPath (path: string, paths: string list) =

@@ -56,9 +56,6 @@ module Common =
         let NvmFsHome = "NVMFS_HOME"
 
         [<Literal>]
-        let NvmTmpDownloads = "NVMFS_TMP_DOWNLOADS"
-
-        [<Literal>]
         let NvmSourceBaseUrl = "NVM_SOURCE_BASE_URL"
 
     let getVersionCodename (version: string) = $"{version.Split('.').[0]}.x"
@@ -71,17 +68,10 @@ module Common =
         |> Option.defaultValue
             (System.IO.Path.GetFullPath $"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/nvmfs")
 
-    let getDownloadTmpDir () =
-        Environment.GetEnvironmentVariable(EnvVars.NvmTmpDownloads)
-        |> Option.ofObj
-        |> Option.defaultValue (System.IO.Path.GetFullPath $"{System.IO.Path.GetTempPath()}/nvmfs")
-
     let getSrcBaseUrl () =
         Environment.GetEnvironmentVariable(EnvVars.NvmSourceBaseUrl)
         |> Option.ofObj
         |> Option.defaultValue "https://nodejs.org/dist"
-
-
 
     let getPlatform () =
         if RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
@@ -99,3 +89,30 @@ module Common =
         | Architecture.X64 -> "x64"
         | Architecture.X86 -> "x86"
         | _ -> ""
+
+
+    let getVersionItem (versions: NodeVerItem []) (install: InstallType) =
+        match install with
+        | LTS ->
+            versions
+            |> Array.choose (fun version -> if version.lts.IsSome then Some version else None)
+            |> Array.tryHead
+        | Current -> versions |> Array.tryHead
+        | SpecificM major ->
+            let major =
+                if major.ToLowerInvariant().StartsWith('v') then major else $"v{major}"
+
+            versions
+            |> Array.tryFind (fun ver -> ver.version.StartsWith($"{major}."))
+        | SpecificMM (major, minor) ->
+            let major =
+                if major.ToLowerInvariant().StartsWith('v') then major else $"v{major}"
+
+            versions
+            |> Array.tryFind (fun ver -> ver.version.StartsWith($"{major}.{minor}."))
+        | SpecificMMP (major, minor, patch) ->
+            let major =
+                if major.ToLowerInvariant().StartsWith('v') then major else $"v{major}"
+
+            versions
+            |> Array.tryFind (fun ver -> ver.version.Contains($"{major}.{minor}.{patch}"))
