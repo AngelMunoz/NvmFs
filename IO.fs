@@ -40,16 +40,11 @@ module IO =
         else
 
         if (RuntimeInformation.IsOSPlatform OSPlatform.Windows) then
-            let symbolicLinkDirectory = Path.GetDirectoryName(symbolicLink)
-
-            if not (Directory.Exists(symbolicLinkDirectory)) then
-                Directory.CreateDirectory(symbolicLinkDirectory)
-                |> ignore
             /// **NOTE**: This requires DevMode enabled on Windows10
             let result =
                 Cli
-                    .Wrap("New-Item")
-                    .WithArguments($"-Path {actualPath} -ItemType SymbolicLink -Value {symbolicLink}")
+                    .Wrap("cmd.exe")
+                    .WithArguments($"""/C "mklink /d {symbolicLink} {actualPath}" """)
                     .WithValidation(CommandResultValidation.None)
                     .ExecuteBufferedAsync()
                     .Task
@@ -107,7 +102,15 @@ module IO =
 
     let extractContents (os: string) (source: string) (output: string) =
         match os with
-        | "win" -> ZipFile.ExtractToDirectory(source, output)
+        | "win" ->
+            try
+                ZipFile.ExtractToDirectory(source, output)
+            with :? System.IO.IOException as ex ->
+                if ex.Message.Contains("already exists.")
+                   || ex.InnerException.Message.Contains("already exists") then
+                    ()
+                else
+                    reraise ()
         | _ ->
             let sourceFile = FileInfo(source)
             use sourceStr = sourceFile.OpenRead()
@@ -143,6 +146,16 @@ module IO =
         Directory.CreateDirectory(dir)
 
     let deleteFile (path: string) = File.Delete(path)
+
+    let deleteSymlink (path: string) =
+        Cli
+            .Wrap("cmd.exe")
+            .WithArguments($"""/C rmdir {path}""")
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync()
+            .Task
+        |> Async.AwaitTask
+        |> Async.RunSynchronously
 
     let rec deleteDirs (path: string) =
         let dir = DirectoryInfo(path)
@@ -186,7 +199,7 @@ module IO =
         let line =
             let ext =
                 match os with
-                | "win" -> ".zip"
+                | "win" -> "zip"
                 | _ -> "tar.gz"
 
             $"node-{version}-{os}-{arch}.{ext}"
