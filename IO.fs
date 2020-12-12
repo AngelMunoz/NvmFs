@@ -147,10 +147,19 @@ module IO =
 
     let deleteFile (path: string) = File.Delete(path)
 
-    let deleteSymlink (path: string) =
-        Cli
-            .Wrap("cmd.exe")
-            .WithArguments($"""/C rmdir {path}""")
+    let deleteSymlink (path: string) (os: string) =
+        let cmd =
+            match os with
+            | "win" ->
+                Cli
+                    .Wrap("cmd.exe")
+                    .WithArguments($"""/C rmdir {path}""")
+            | _ ->
+                Cli
+                    .Wrap("unlink")
+                    .WithArguments($"""{if path.EndsWith("/") then path.Substring(0, path.Length - 1) else path}""")
+
+        cmd
             .WithValidation(CommandResultValidation.None)
             .ExecuteBufferedAsync()
             .Task

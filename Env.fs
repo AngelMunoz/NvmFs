@@ -64,13 +64,10 @@ module Env =
         match nvmfsnode with
         | Some node ->
             try
-                match os with
-                | "win" ->
-                    let result = IO.deleteSymlink node
+                let result = IO.deleteSymlink node os
 
-                    if result.ExitCode <> 0
-                    then AnsiConsole.WriteLine($"Failed to delete symlink: {node} - [red]{result.StandardError}[/]")
-                | _ -> IO.deleteFile node
+                if result.ExitCode <> 0
+                then AnsiConsole.WriteLine($"Failed to delete symlink: {node} - [red]{result.StandardError}[/]")
             with ex ->
                 AnsiConsole.WriteLine
                     $"Failed to Delete: {node} it's very likely that the directory didn't exist before"
