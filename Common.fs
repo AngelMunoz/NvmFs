@@ -65,6 +65,13 @@ module Common =
 
     let getLtsCodename (version: string) = $"{version.ToLowerInvariant()}"
 
+    let getCodename (version: NodeVerItem) =
+        let defVersion = getVersionCodename version.version
+
+        let defLts = version.lts |> Option.map getLtsCodename
+
+        defaultArg defLts (defVersion)
+
     let getHome () =
         Environment.GetEnvironmentVariable(EnvVars.NvmFsHome)
         |> Option.ofObj
@@ -76,7 +83,7 @@ module Common =
         |> Option.ofObj
         |> Option.defaultValue "https://nodejs.org/dist"
 
-    let getPlatform () =
+    let getOS () =
         if RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
         then "linux"
         else if RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
@@ -119,3 +126,5 @@ module Common =
 
             versions
             |> Array.tryFind (fun ver -> ver.version.Contains($"{major}.{minor}.{patch}"))
+
+    let getVersionDirName (version: string) (os: string) (arch: string) = $"node-%s{version}-%s{os}-%s{arch}"

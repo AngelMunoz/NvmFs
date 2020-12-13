@@ -184,6 +184,13 @@ module IO =
         let paths = path :: paths
         Path.GetFullPath(Path.Combine(paths |> Array.ofList))
 
+    let getSymlinkPath (codename: string) (directory: string) (os: string) =
+        fullPath
+            (Common.getHome (),
+             [ $"latest-{codename}"
+               $"{directory}"
+               if os = "win" then "" else "bin" ])
+
 
     let getIndex () =
         task {
@@ -232,3 +239,9 @@ module IO =
 
         for line in lines do
             file.WriteLine(line)
+
+    let codenameExistsInDisk (codename: string) =
+        let home = DirectoryInfo(Common.getHome ())
+
+        home.GetDirectories()
+        |> Array.exists (fun dir -> dir.Name.Contains(codename))
