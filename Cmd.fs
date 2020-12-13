@@ -177,7 +177,16 @@ module Actions =
                             IO.extractContents os node (IO.fullPath (Common.getHome (), [ $"latest-{codename}" ]))
 
                             AnsiConsole.MarkupLine "[green]Extraction Complete![/]"
-                            IO.deleteFile node
+
+                            try
+                                let dirname = IO.getParentDir checksums
+                                IO.deleteFile node
+                                IO.deleteFile checksums
+                                IO.deleteDirs dirname
+                            with ex ->
+#if DEBUG
+                                AnsiConsole.WriteException(ex, ExceptionFormats.ShortenEverything)
+#endif
 
                             if setAsDefault then
                                 let! result = setVersionAsDefault version.version codename os arch

@@ -147,6 +147,10 @@ module IO =
 
     let deleteFile (path: string) = File.Delete(path)
 
+    let getParentDir (file: string) =
+        let file = FileInfo(file)
+        file.DirectoryName
+
     let deleteSymlink (path: string) (os: string) =
         let cmd =
             match os with
@@ -168,7 +172,7 @@ module IO =
 
     let rec deleteDirs (path: string) =
         let dir = DirectoryInfo(path)
-        let dirs = dir.EnumerateDirectories(path)
+        let dirs = dir.EnumerateDirectories()
 
         if Seq.isEmpty dirs then
             Directory.Delete path
