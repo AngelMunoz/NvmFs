@@ -21,7 +21,7 @@ type Install =
 
 [<Verb("uninstall", HelpText = "Uninstalls the specified node version or the latest Current by default")>]
 type Uninstall =
-    { [<Option('v', "version", Group = "version", HelpText = "Removes the specified node version")>]
+    { [<Option('n', "node", Group = "version", HelpText = "Removes the specified node version")>]
       version: string
       [<Option('l', "lts", Group = "version", HelpText = "Ignores version and removes the latest LTS version")>]
       lts: Nullable<bool>
@@ -30,7 +30,7 @@ type Uninstall =
 
 [<Verb("use", HelpText = "Sets the Node Version")>]
 type Use =
-    { [<Option('v', "version", Group = "version", HelpText = "sets the specified node version in the PATH")>]
+    { [<Option('n', "node", Group = "version", HelpText = "sets the specified node version in the PATH")>]
       version: string
       [<Option('l',
                "lts",
@@ -58,10 +58,13 @@ module Actions =
             let (parsed, _) = System.Int32.TryParse(num)
             parsed
 
-    let private getInstallType (options: Install): Result<InstallType, string> =
-        let isLts = options.lts |> Option.ofNullable
-        let isCurrent = options.current |> Option.ofNullable
-        let version = options.version |> Option.ofObj
+    let private getInstallType (isLts: Nullable<bool>)
+                               (isCurrent: Nullable<bool>)
+                               (version: string)
+                               : Result<InstallType, string> =
+        let isLts = isLts |> Option.ofNullable
+        let isCurrent = isCurrent |> Option.ofNullable
+        let version = version |> Option.ofObj
 
         match isLts, isCurrent, version with
         | Some lts, None, None ->
@@ -90,9 +93,37 @@ module Actions =
                 else
                     Result.Error $"{version} is not a valid node version"
             | _ -> Result.Error $"{version} is not a valid node version"
-        | _ ->
-            Result.Error
-                $"Use only one of --{nameof options.lts}, --{nameof options.current}, or --{nameof options.version}"
+        | _ -> Result.Error $"Use only one of --lts 'boolean', --current 'boolean', or --version 'string'"
+
+    let private setVersionAsDefault (version: string)
+                                    (codename: string)
+                                    (os: string)
+                                    (arch: string)
+                                    : Task<Result<unit, string>> =
+        task {
+            let directory = Common.getVersionDirName version os arch
+
+            let symlinkpath = IO.getSymlinkPath codename directory os
+
+            match Env.setEnvVersion os symlinkpath with
+            | Ok _ ->
+                AnsiConsole.MarkupLine("[yellow]Setting permissions for node[/]")
+
+                match os with
+                | "win" -> return Ok()
+                | _ ->
+                    let! result = IO.trySetPermissionsUnix symlinkpath
+
+                    if result.ExitCode <> 0 then
+                        let errors =
+                            result.Errors
+                            |> List.fold (fun value next -> $"{value}\n{next}") ""
+
+                        return Result.Error($"[red]Error while setting permissions[/]: {errors}")
+                    else
+                        return Ok()
+            | Error err -> return Result.Error err
+        }
 
     let private runPreInstallChecks () =
         let homedir = IO.createHomeDir ()
@@ -104,14 +135,13 @@ module Actions =
         }
         :> Task
 
-
     let Install (options: Install) =
         task {
             do! runPreInstallChecks ()
 
             let! versions = IO.getIndex ()
 
-            match getInstallType options,
+            match getInstallType options.lts options.current options.version,
                   (Option.ofNullable options.isDefault
                    |> Option.defaultValue false) with
             | Ok install, setAsDefault ->
@@ -119,20 +149,13 @@ module Actions =
 
                 match version with
                 | Some version ->
-                    let os = Common.getPlatform ()
+                    let os = Common.getOS ()
                     let arch = Common.getArch ()
 
-                    let codename =
-                        let defVersion =
-                            Common.getVersionCodename version.version
+                    let codename = Common.getCodename version
 
-                        let defLts =
-                            version.lts |> Option.map Common.getLtsCodename
-
-                        defaultArg defLts (defVersion)
-
-                    let! checksums = Network.downloadChecksumsForVersion $"latest-{codename}"
-                    let! node = Network.downloadNode $"latest-{codename}" version.version os arch
+                    let! checksums = Network.downloadChecksumsForVersion $"{version.version}"
+                    let! node = Network.downloadNode $"{version.version}" version.version os arch
                     AnsiConsole.MarkupLine $"[#5f5f00]Downloaded[/]: {checksums} - {node}"
 
                     match IO.getChecksumForVersion checksums version.version os arch with
@@ -156,34 +179,14 @@ module Actions =
                             AnsiConsole.MarkupLine "[green]Extraction Complete![/]"
                             IO.deleteFile node
 
-                            let directory =
-                                $"node-%s{version.version}-%s{os}-%s{arch}"
+                            if setAsDefault then
+                                let! result = setVersionAsDefault version.version codename os arch
 
-                            let symlinkpath =
-                                IO.fullPath
-                                    (Common.getHome (),
-                                     [ $"latest-{codename}"
-                                       $"{directory}"
-                                       if os = "win" then "" else "bin" ])
-
-                            match Env.setEnvVersion os symlinkpath with
-                            | Ok _ ->
-                                AnsiConsole.MarkupLine("[yellow]Setting permissions for node[/]")
-
-                                match os with
-                                | "win" -> ()
-                                | _ ->
-                                    let! result = IO.trySetPermissionsUnix symlinkpath
-
-                                    if result.ExitCode <> 0 then
-                                        let errors =
-                                            result.Errors
-                                            |> List.fold (fun value next -> $"{value}\n{next}") ""
-
-                                        AnsiConsole.WriteLine $"[red]Error while setting permissions[/]: {errors}"
-
-                                AnsiConsole.MarkupLine $"[bold green]Node version installed correctly[/]"
-                            | Error err -> AnsiConsole.MarkupLine err
+                                match result with
+                                | Ok () ->
+                                    AnsiConsole.MarkupLine
+                                        $"[bold green]Node version {version.version} installed and set as default[/]"
+                                | Error err -> AnsiConsole.MarkupLine err
 
                             return 0
                     | None ->
@@ -200,6 +203,47 @@ module Actions =
         }
 
 
-    let Use (options: Use) = 0
+    let Use (options: Use) =
+        task {
+            AnsiConsole.MarkupLine $"[bold yellow]Checking local versions[/]"
+
+            let! versions = IO.getIndex ()
+
+            match getInstallType options.lts options.current options.version with
+            | Ok install ->
+                let version = Common.getVersionItem versions install
+
+                match version with
+                | Some version ->
+
+                    let os = Common.getOS ()
+                    let arch = Common.getArch ()
+
+                    let codename = Common.getCodename version
+
+                    if not (IO.codenameExistsInDisk codename) then
+                        let l1 = "[bold red]We didn't find version[/]"
+                        let l2 = $"[bold yellow]%s{version.version}[/]"
+                        AnsiConsole.MarkupLine $"{l1} {l2} within [bold yellow]%s{codename}[/]"
+                        return 1
+                    else
+                        AnsiConsole.MarkupLine $"[bold yellow]Setting version[/] [green]%s{version.version}[/]"
+
+                        let! result = setVersionAsDefault version.version codename os arch
+
+                        match result with
+                        | Ok () ->
+                            AnsiConsole.MarkupLine $"[bold green]Node version {version.version} set as the default[/]"
+                        | Error err -> AnsiConsole.MarkupLine err
+
+                        return 0
+                | None ->
+                    AnsiConsole.MarkupLine "[bold red]Version Not found[/]"
+                    return 1
+            | Error err ->
+                AnsiConsole.MarkupLine $"[bold red]{err}[/]"
+                return 1
+        }
+
     let Uninstall (options: Uninstall) = 0
     let List (options: List) = 0

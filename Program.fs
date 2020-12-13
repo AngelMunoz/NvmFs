@@ -21,7 +21,10 @@ module Main =
                     Actions.Install opts
                     |> Async.AwaitTask
                     |> Async.RunSynchronously
-                | :? Use as opts -> Actions.Use opts
+                | :? Use as opts ->
+                    Actions.Use opts
+                    |> Async.AwaitTask
+                    |> Async.RunSynchronously
                 | :? Uninstall as opts -> Actions.Uninstall opts
                 | :? List as opts -> Actions.List opts
                 | _ -> 1
