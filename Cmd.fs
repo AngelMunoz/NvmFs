@@ -179,15 +179,17 @@ module Actions =
 
                             AnsiConsole.MarkupLine "[green]Extraction Complete![/]"
 
-                            try
-                                let dirname = IO.getParentDir checksums
-                                IO.deleteFile node
-                                IO.deleteFile checksums
-                                IO.deleteDir dirname
-                            with ex ->
+                            let tryClean () =
+                                try
+                                    let dirname = IO.getParentDir checksums
+                                    IO.deleteFile node
+                                    IO.deleteFile checksums
+                                    IO.deleteDir dirname
+                                with ex ->
 #if DEBUG
-                                AnsiConsole.WriteException(ex, ExceptionFormats.ShortenEverything)
+                                    AnsiConsole.WriteException(ex, ExceptionFormats.ShortenEverything)
 #endif
+                                ()
 
                             if setAsDefault then
                                 let! result = setVersionAsDefault version.version codename os arch
@@ -196,9 +198,14 @@ module Actions =
                                 | Ok () ->
                                     AnsiConsole.MarkupLine
                                         $"[bold green]Node version {version.version} installed and set as default[/]"
-                                | Error err -> AnsiConsole.MarkupLine err
 
-                            return 0
+                                    tryClean ()
+                                    return 0
+                                | Error err ->
+                                    AnsiConsole.MarkupLine err
+                                    return 1
+                            else
+                                return 0
                     | None ->
                         AnsiConsole.MarkupLine
                             $"[bold red]The Checksums didnt match\ndownload: {IO.getChecksumForFile node}\nchecksum: None[/]"

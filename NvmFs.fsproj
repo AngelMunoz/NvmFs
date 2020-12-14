@@ -3,6 +3,20 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
+    <Summary>
+      A Super Simple Node Version Manager Written in F#
+    </Summary>
+    <Description>
+      Another Node Version Manager, but this time written in F# that covers the most simple of use cases
+    </Description>
+    <Version>0.5.0</Version>
+    <Title>NvmFS</Title>
+    <Authors>Angel D. Munoz</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <ProjectUrl>https://github.com/AngelMunoz/NvmFs</ProjectUrl>
+    <RepositoryUrl>https://github.com/AngelMunoz/NvmFs.git</RepositoryUrl>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>nvmfs</ToolCommandName>
   </PropertyGroup>
 
   <ItemGroup>
