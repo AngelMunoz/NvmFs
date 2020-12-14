@@ -13,23 +13,25 @@ module Main =
         let result =
             Parser.Default.ParseArguments<Install, Use, List, Uninstall>(argv)
 
-        try
-            match result with
-            | :? (Parsed<obj>) as cmd ->
-                match cmd.Value with
-                | :? Install as opts ->
-                    Actions.Install opts
-                    |> Async.AwaitTask
-                    |> Async.RunSynchronously
-                | :? Use as opts ->
-                    Actions.Use opts
-                    |> Async.AwaitTask
-                    |> Async.RunSynchronously
-                | :? Uninstall as opts -> Actions.Uninstall opts
-                | :? List as opts -> Actions.List opts
-                | _ -> 1
-            | _ -> 1
-        with ex ->
+        let result =
+            task {
+                match result with
+                | :? (Parsed<obj>) as cmd ->
+                    match cmd.Value with
+                    | :? Install as opts -> return! Actions.Install opts
+                    | :? Use as opts -> return! Actions.Use opts
+                    | :? Uninstall as opts -> return! Actions.Uninstall opts
+                    | :? List as opts -> return! Actions.List opts
+                    | _ -> return 1
+                | _ -> return 1
+            }
+            |> Async.AwaitTask
+            |> Async.Catch
+            |> Async.RunSynchronously
+
+        match result with
+        | Choice1Of2 result -> result
+        | Choice2Of2 ex ->
 #if DEBUG
             AnsiConsole.WriteException(ex, ExceptionFormats.ShortenEverything)
 #endif
