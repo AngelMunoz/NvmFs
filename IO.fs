@@ -170,19 +170,25 @@ module IO =
         |> Async.AwaitTask
         |> Async.RunSynchronously
 
-    let rec deleteDirs (path: string) =
-        let dir = DirectoryInfo(path)
-        let dirs = dir.EnumerateDirectories()
+    let getCurrentNodeVersion (os: string) =
+        let cmd =
+            match os with
+            | "win" -> Cli.Wrap("node.exe")
+            | _ -> Cli.Wrap("node")
 
-        if Seq.isEmpty dirs then
-            Directory.Delete path
-        else
-            for directory in dirs do
-                deleteDirs directory.FullName
+        cmd
+            .WithArguments("--version")
+            .WithValidation(CommandResultValidation.None)
+            .ExecuteBufferedAsync()
+            .Task
+
+    let deleteDir (path: string) =
+        let dir = DirectoryInfo(path)
+        dir.Delete(true)
 
     let removeHomeDir () =
         let dir = NvmFs.Common.getHome ()
-        deleteDirs dir
+        deleteDir dir
 
     let fullPath (path: string, paths: string list) =
         let paths = path :: paths
@@ -249,3 +255,30 @@ module IO =
 
         home.GetDirectories()
         |> Array.exists (fun dir -> dir.Name.Contains(codename))
+
+    let versionExistsInDisk (codename: string) (version: string) =
+        let home = DirectoryInfo(Common.getHome ())
+        let directories = home.GetDirectories()
+
+        let exists =
+            directories
+            |> Array.exists (fun dir -> dir.Name.Contains(codename))
+
+        if not exists then
+            false
+        else
+            directories
+            |> Array.map (fun dir -> dir.GetDirectories())
+            |> Array.reduce Array.append
+            |> Array.map (fun dir -> dir.Name.Split('-').[1])
+            |> Array.exists (fun dir -> dir.Contains(version))
+
+
+    let getLocalNodes () =
+        let home = DirectoryInfo(Common.getHome ())
+
+        home.GetDirectories()
+        |> Array.map (fun dir -> dir.GetDirectories())
+        |> Array.reduce Array.append
+        |> Array.map (fun dir -> dir.Name.Split('-').[1])
+        |> Array.sortDescending

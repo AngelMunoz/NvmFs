@@ -19,14 +19,10 @@ type Install =
       [<Option('d', "default", Required = false, HelpText = "Sets the downloaded version as default (default: false)")>]
       isDefault: Nullable<bool> }
 
-[<Verb("uninstall", HelpText = "Uninstalls the specified node version or the latest Current by default")>]
+[<Verb("uninstall", HelpText = "Uninstalls the specified node version")>]
 type Uninstall =
-    { [<Option('n', "node", Group = "version", HelpText = "Removes the specified node version")>]
-      version: string
-      [<Option('l', "lts", Group = "version", HelpText = "Ignores version and removes the latest LTS version")>]
-      lts: Nullable<bool>
-      [<Option('c', "current", Group = "version", HelpText = "Ignores version and removes latest Current version")>]
-      current: Nullable<bool> }
+    { [<Option('n', "node", Required = true, HelpText = "Removes the specified node version")>]
+      version: string }
 
 [<Verb("use", HelpText = "Sets the Node Version")>]
 type Use =
@@ -43,10 +39,15 @@ type Use =
                HelpText = "Ignores version and sets the latest downloaded Current version in the PATH")>]
       current: Nullable<bool> }
 
-[<Verb("list", HelpText = "Sets the Node Version")>]
+[<Verb("list", HelpText = "Shows the available node versions")>]
 type List =
-    { [<Option('r', "remote", Required = false, HelpText = "Pulls the version list from the node website")>]
-      remote: Nullable<bool> }
+    { [<Option('r', "remote", Required = false, HelpText = "Displays the last downloaded version index in the console")>]
+      remote: Nullable<bool>
+      [<Option('u',
+               "update",
+               Required = false,
+               HelpText = "Use together with --remote, pulls the version index from the node website")>]
+      updateIndex: Nullable<bool> }
 
 [<RequireQualifiedAccess>]
 module Actions =
@@ -182,7 +183,7 @@ module Actions =
                                 let dirname = IO.getParentDir checksums
                                 IO.deleteFile node
                                 IO.deleteFile checksums
-                                IO.deleteDirs dirname
+                                IO.deleteDir dirname
                             with ex ->
 #if DEBUG
                                 AnsiConsole.WriteException(ex, ExceptionFormats.ShortenEverything)
@@ -254,5 +255,136 @@ module Actions =
                 return 1
         }
 
-    let Uninstall (options: Uninstall) = 0
-    let List (options: List) = 0
+    let Uninstall (options: Uninstall) =
+        task {
+            let! versions = IO.getIndex ()
+
+            match getInstallType (Nullable<bool>()) (Nullable<bool>()) options.version with
+            | Ok install ->
+                let version = Common.getVersionItem versions install
+
+                match version with
+                | Some version ->
+
+                    let os = Common.getOS ()
+                    let arch = Common.getArch ()
+
+                    let codename = Common.getCodename version
+
+                    if not (IO.versionExistsInDisk codename version.version) then
+                        let l1 =
+                            $"[red]Version[/] [bold yellow]%s{version.version}[/]"
+
+                        let l2 =
+                            $"[red]is not present in the system, aborting.[/]"
+
+                        AnsiConsole.MarkupLine $"{l1} {l2}"
+                        return 1
+                    else
+                        AnsiConsole.MarkupLine $"[yellow]Uninstalling version[/]: %s{version.version}"
+
+                        let path =
+                            IO.fullPath
+                                (Common.getHome (),
+                                 [ $"latest-{codename}"
+                                   Common.getVersionDirName version.version os arch ])
+
+                        try
+                            IO.deleteDir path
+
+                            AnsiConsole.MarkupLine
+                                $"[green]Uninstalled Version[/] [bold yellow]%s{version.version}[/][green] successfully[/]"
+
+                            return 0
+                        with ex ->
+                            AnsiConsole.MarkupLine $"[bold red]Failed to delete {version.version}[/]"
+#if DEBUG
+                            AnsiConsole.WriteException(ex, ExceptionFormats.ShortenEverything)
+#endif
+                            return 1
+                | None ->
+                    AnsiConsole.MarkupLine "[bold red]Version Not found[/]"
+                    return 1
+            | Result.Error err ->
+                AnsiConsole.MarkupLine $"[bold red]{err}[/]"
+                return 1
+        }
+
+    let List (options: List) =
+        task {
+            let checkRemote =
+                options.remote
+                |> Option.ofNullable
+                |> Option.defaultValue false
+
+            let updateIndex =
+                checkRemote
+                && (options.updateIndex
+                    |> Option.ofNullable
+                    |> Option.defaultValue false)
+
+            let! currentVersion =
+                task {
+                    let! result = IO.getCurrentNodeVersion (Common.getOS ())
+                    if result.ExitCode <> 0 then return "" else return result.StandardOutput.Trim()
+                }
+
+            let getVersionsTable (localVersions: string []) (remoteVersions: string [] option) =
+                let remoteVersions = defaultArg remoteVersions [||]
+
+                let table =
+                    Table()
+                        .AddColumns([| TableColumn("Local")
+                                       if remoteVersions.Length > 0 then TableColumn("Remote") |])
+
+                table.Title <- TableTitle("Node Versions\n[green]* currently set as default[/]")
+
+                let longestLength =
+                    if localVersions.Length > remoteVersions.Length
+                    then localVersions.Length
+                    else remoteVersions.Length
+
+                let markCurrent (version: string) =
+                    if version.Contains(currentVersion) then $"[green]{version}*[/]" else version
+
+                for i in 0 .. longestLength - 1 do
+                    let localVersion =
+                        localVersions
+                        |> Array.tryItem i
+                        |> Option.defaultValue ""
+
+                    table.AddRow
+                        ([| markCurrent localVersion
+                            if remoteVersions.Length > 0 then
+                                markCurrent
+                                    (remoteVersions
+                                     |> Array.tryItem i
+                                     |> Option.defaultValue "") |])
+                    |> ignore
+
+                table
+
+            let! local, remote =
+                task {
+                    match checkRemote, updateIndex with
+                    | true, true ->
+                        do! runPreInstallChecks ()
+                        let! nodes = IO.getIndex ()
+                        return IO.getLocalNodes (), Some(nodes |> Array.map (fun ver -> ver.version))
+                    | true, false ->
+                        AnsiConsole.MarkupLine "[yellow]Checking local versions[/]"
+
+                        let! nodes = IO.getIndex ()
+                        return IO.getLocalNodes (), Some(nodes |> Array.map (fun ver -> ver.version))
+                    | false, true ->
+                        AnsiConsole.MarkupLine
+                            "[yellow]Warning[/]: --update can only be used when [yellow]--remote true[/] is set, ignoring."
+
+                        return IO.getLocalNodes (), None
+                    | _ -> return IO.getLocalNodes (), None
+                }
+
+            let table = getVersionsTable local remote
+            AnsiConsole.Render table
+            return 0
+        }
