@@ -195,11 +195,12 @@ module IO =
         Path.GetFullPath(Path.Combine(paths |> Array.ofList))
 
     let getSymlinkPath (codename: string) (directory: string) (os: string) =
-        fullPath
-            (Common.getHome (),
-             [ $"latest-{codename}"
-               $"{directory}"
-               if os = "win" then "" else "bin" ])
+        fullPath (
+            Common.getHome (),
+            [ $"latest-{codename}"
+              $"{directory}"
+              if os = "win" then "" else "bin" ]
+        )
 
 
     let getIndex () =
@@ -280,5 +281,6 @@ module IO =
         home.GetDirectories()
         |> Array.map (fun dir -> dir.GetDirectories())
         |> Array.reduce Array.append
+        |> Array.filter (fun dir -> not (dir.FullName.Contains("bin")))
         |> Array.map (fun dir -> dir.Name.Split('-').[1])
         |> Array.sortDescending

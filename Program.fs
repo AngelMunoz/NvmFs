@@ -32,7 +32,5 @@ module Main =
         match result with
         | Choice1Of2 result -> result
         | Choice2Of2 ex ->
-#if DEBUG
             AnsiConsole.WriteException(ex, ExceptionFormats.ShortenEverything)
-#endif
             1
