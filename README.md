@@ -5,6 +5,7 @@
 # NvmFs
 
 > Node Version Manager F#
+>
 > Get the binaries at the [releases](https://github.com/AngelMunoz/NvmFs/releases) tab
 >
 > if you have the dotnet-sdk installed run  `dotnet tool install -g NvmFs`
