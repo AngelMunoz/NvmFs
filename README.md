@@ -5,6 +5,9 @@
 # NvmFs
 
 > Node Version Manager F#
+> Get the binaries at the [releases](https://github.com/AngelMunoz/NvmFs/releases) tab
+>
+> if you have the dotnet-sdk installed run  `dotnet tool install -g NvmFs`
 
 A Node version Manager Written in F#
 
@@ -15,6 +18,7 @@ This is probably the simplest Node Version Manager you'll find it doesn't have a
 If you want a dead simple node version manager this is for you.
 
 Also, this tool is distributed in binary form as well as a `dotnet tool` so if you're running on CI with dotnet available and depend on installing a specific node version, perhaps this is the reason you may want it above the others.
+
 
 ## Why would you not want this?
 
