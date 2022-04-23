@@ -8,7 +8,7 @@
 >
 > Get the binaries at the [releases](https://github.com/AngelMunoz/NvmFs/releases) tab
 >
-> if you have the dotnet-sdk installed run  `dotnet tool install -g NvmFs`
+> if you have the dotnet-sdk installed run `dotnet tool install -g NvmFs`
 
 A Node version Manager Written in F#
 
@@ -19,7 +19,6 @@ This is probably the simplest Node Version Manager you'll find it doesn't have a
 If you want a dead simple node version manager this is for you.
 
 Also, this tool is distributed in binary form as well as a `dotnet tool` so if you're running on CI with dotnet available and depend on installing a specific node version, perhaps this is the reason you may want it above the others.
-
 
 ## Why would you not want this?
 
@@ -38,15 +37,16 @@ We don't handle existing node instalations outside the `NVMFS_HOME` directory
 - Windows
 
   - We use the user's system environment variables, if your powershell/cmd session is not recognizing node, then you need to close it and open it again, in the worst case you just need to log off and log in back to your account
-  - we use cmd's `mklink` to create symlinks on windows
-    > Please Note that this requires developer mode turned on on [windows 10](https://blogs.windows.com/windowsdeveloper/2016/12/02/symlinks-windows-10/)
-  - we use cmd's `rmdir` to remove symlinks
+  - we use cmd's `mklink` to create junctions on windows
+
+  > In versions lower than 0.6.0 we used to re-write the user's path but that also expanded any Environment variable that was part of the PATH, rather than doing that we now just add the **NVMFS_HOME** and **NVMFS_NODE** environment variables to the user's variables, it is up to you to add **%NVMFS_NODE%%** to the **PATH** variable
 
 - Unix
   - We append environment variables to the PATH using the `~/.bashrc`
   - We use `ln -s` to create symlinks
   - We use `unlink` to remove symlinks
   - We use `chmod +x` to set execute permissions once we symlink the selected version
+    > Don't forget to call `source ~/.bashrc` to make your current terminal aware of the changes, other terminals will pick up those automatically
 
 ## Customization
 
@@ -67,7 +67,7 @@ You can customize paths using the following environment variables
 ### nvmfs help
 
 ```
-NvmFs 0.5.0
+NvmFs 0.6.0
 Copyright (C) 2020 Angel D. Munoz
 
   install      Installs the specified node version or the latest LTS by default
@@ -86,7 +86,7 @@ Copyright (C) 2020 Angel D. Munoz
 ### nvmfs install --help
 
 ```
-NvmFs 0.5.0
+NvmFs 0.6.0
 Copyright (C) 2020 Angel D. Munoz
 
   -n, --node       (Group: version) Installs the specified node version
@@ -105,7 +105,7 @@ Copyright (C) 2020 Angel D. Munoz
 ### nvmfs use --help
 
 ```
-NvmFs 0.5.0
+NvmFs 0.6.0
 Copyright (C) 2020 Angel D. Munoz
 
   -n, --node       (Group: version) sets the specified node version in the PATH
@@ -122,7 +122,7 @@ Copyright (C) 2020 Angel D. Munoz
 ### nvmfs list --help
 
 ```
-NvmFs 0.5.0
+NvmFs 0.6.0
 Copyright (C) 2020 Angel D. Munoz
 
   -r, --remote    Displays the last downloaded version index in the console
@@ -137,7 +137,7 @@ Copyright (C) 2020 Angel D. Munoz
 ### nvmfs uninstall --help
 
 ```
-NvmFs 0.5.0
+NvmFs 0.6.0
 Copyright (C) 2020 Angel D. Munoz
 
   -n, --node    Required. Removes the specified node version

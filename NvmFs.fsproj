@@ -9,7 +9,7 @@
     <Description>
       Another Node Version Manager, but this time written in F# that covers the most simple of use cases
     </Description>
-    <Version>0.5.1</Version>
+    <Version>0.6.0</Version>
     <Title>NvmFS</Title>
     <Authors>Angel D. Munoz</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
