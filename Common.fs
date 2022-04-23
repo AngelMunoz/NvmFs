@@ -19,7 +19,7 @@ type NodeVerItem =
 
     static member Decoder: Decoder<NodeVerItem> =
 
-        let customDecode (value: string) (jvalue: JsonValue): Result<string option, DecoderError> =
+        let customDecode (value: string) (jvalue: JsonValue) : Result<string option, DecoderError> =
             match Decode.bool value jvalue with
             | Ok _ -> Ok None
             | Error _ ->
@@ -27,19 +27,18 @@ type NodeVerItem =
                 | Ok str -> Ok(Option.ofObj str)
                 | Error err -> Error err
 
-        Decode.object
-            (fun get ->
-                { version = get.Required.Field "version" Decode.string
-                  date = get.Required.Field "date" Decode.string
-                  files = get.Required.Field "files" (Decode.list Decode.string)
-                  npm = get.Optional.Field "npm" Decode.string
-                  v8 = get.Required.Field "v8" Decode.string
-                  uv = get.Optional.Field "uv" Decode.string
-                  zlib = get.Optional.Field "zlib" Decode.string
-                  openssl = get.Optional.Field "openssl" Decode.string
-                  modules = get.Optional.Field "modules" Decode.string
-                  lts = get.Required.Field "lts" customDecode
-                  security = get.Required.Field "security" Decode.bool })
+        Decode.object (fun get ->
+            { version = get.Required.Field "version" Decode.string
+              date = get.Required.Field "date" Decode.string
+              files = get.Required.Field "files" (Decode.list Decode.string)
+              npm = get.Optional.Field "npm" Decode.string
+              v8 = get.Required.Field "v8" Decode.string
+              uv = get.Optional.Field "uv" Decode.string
+              zlib = get.Optional.Field "zlib" Decode.string
+              openssl = get.Optional.Field "openssl" Decode.string
+              modules = get.Optional.Field "modules" Decode.string
+              lts = get.Required.Field "lts" customDecode
+              security = get.Required.Field "security" Decode.bool })
 
 type InstallType =
     | LTS
@@ -48,7 +47,53 @@ type InstallType =
     | SpecificMM of string * string
     | SpecificMMP of string * string * string
 
+type CurrentOS =
+    | Linux
+    | Mac
+    | Windows
+    | FreeBSD
+
+    member this.AsNodeUrlValue =
+        match this with
+        | Linux -> "linux"
+        | Mac -> "darwin"
+        | Windows -> "win"
+        | FreeBSD -> "freebsd"
+
+type SystemError =
+    | FailedToGetOS
+    | FailedToGetArch
+
+type InstallError =
+    | ChecksumNotFound
+    | ChecksumMissmatch
+    | FailedToSetDefault of string
+    | PlatformError
+
+[<RequireQualifiedAccess>]
+type UninstallError =
+    | PlatformError
+    | NodeNotInDisk
+    | FailedToDelete of exn
+
+type SetDefaultError =
+    | SymlinkError of string
+    | PermissionError of string
+    | UnsuppoertdOS
+    member this.Value =
+        match this with
+        | SymlinkError err -> err
+        | PermissionError err -> err
+        | UnsuppoertdOS -> "The OS is not supported"
+
+[<RequireQualifiedAccess>]
+type UseError =
+    | NodeNotInDisk of string
+    | FailedToSetDefault of string
+    | PlatformError
+
 module Common =
+    open FsToolkit.ErrorHandling
 
     [<RequireQualifiedAccess>]
     module EnvVars =
@@ -75,56 +120,94 @@ module Common =
     let getHome () =
         Environment.GetEnvironmentVariable(EnvVars.NvmFsHome)
         |> Option.ofObj
-        |> Option.defaultValue
-            (System.IO.Path.GetFullPath $"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/nvmfs")
+        |> Option.defaultValue (
+            System.IO.Path.GetFullPath $"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/nvmfs"
+        )
 
     let getSrcBaseUrl () =
         Environment.GetEnvironmentVariable(EnvVars.NvmSourceBaseUrl)
         |> Option.ofObj
         |> Option.defaultValue "https://nodejs.org/dist"
 
-    let getOS () =
-        if RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-        then "linux"
-        else if RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-        then "win"
-        else if RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-        then "darwin"
-        else ""
+    let getOSPlatform () =
+        if RuntimeInformation.IsOSPlatform(OSPlatform.Linux) then
+            Ok Linux
+        else if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
+            Ok Windows
+        else if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
+            Ok Mac
+        else if RuntimeInformation.IsOSPlatform(OSPlatform.FreeBSD) then
+            Error "FreeBSD is not supported"
+        else
+            Error "Unrecognized platform"
+
+    let (|IsMacOrLinux|IsWindows|Unsupported|) os =
+        match os with
+        | Ok Mac
+        | Ok Linux -> IsMacOrLinux
+        | Ok Windows -> IsWindows
+        | Ok FreeBSD -> Unsupported "FreeBSD is not supported"
+        | Error value -> Unsupported value
 
     let getArch () =
         match RuntimeInformation.OSArchitecture with
-        | Architecture.Arm -> "armv7l"
-        | Architecture.Arm64 -> "arm64"
-        | Architecture.X64 -> "x64"
-        | Architecture.X86 -> "x86"
-        | _ -> ""
+        | Architecture.Arm -> Ok "armv7l"
+        | Architecture.Arm64 -> Ok "arm64"
+        | Architecture.X64 -> Ok "x64"
+        | Architecture.X86 -> Ok "x86"
+        | Architecture.Wasm -> Error "Wasm is not supported"
+        | value -> Error $"{value} is not supported"
 
 
     let getVersionItem (versions: NodeVerItem []) (install: InstallType) =
         match install with
         | LTS ->
             versions
-            |> Array.choose (fun version -> if version.lts.IsSome then Some version else None)
+            |> Array.choose (fun version ->
+                if version.lts.IsSome then
+                    Some version
+                else
+                    None)
             |> Array.tryHead
         | Current -> versions |> Array.tryHead
         | SpecificM major ->
             let major =
-                if major.ToLowerInvariant().StartsWith('v') then major else $"v{major}"
+                if major.ToLowerInvariant().StartsWith('v') then
+                    major
+                else
+                    $"v{major}"
 
             versions
             |> Array.tryFind (fun ver -> ver.version.StartsWith($"{major}."))
         | SpecificMM (major, minor) ->
             let major =
-                if major.ToLowerInvariant().StartsWith('v') then major else $"v{major}"
+                if major.ToLowerInvariant().StartsWith('v') then
+                    major
+                else
+                    $"v{major}"
 
             versions
             |> Array.tryFind (fun ver -> ver.version.StartsWith($"{major}.{minor}."))
         | SpecificMMP (major, minor, patch) ->
             let major =
-                if major.ToLowerInvariant().StartsWith('v') then major else $"v{major}"
+                if major.ToLowerInvariant().StartsWith('v') then
+                    major
+                else
+                    $"v{major}"
 
             versions
             |> Array.tryFind (fun ver -> ver.version.Contains($"{major}.{minor}.{patch}"))
 
-    let getVersionDirName (version: string) (os: string) (arch: string) = $"node-%s{version}-%s{os}-%s{arch}"
+    let getVersionDirName (version: string) (os: CurrentOS) (arch: string) =
+        $"node-%s{version}-%s{os.AsNodeUrlValue}-%s{arch}"
+
+    let getOsArchCodename (version) =
+        result {
+            let codename = getCodename version
+
+            let! os = getOSPlatform () |> Result.setError FailedToGetOS
+
+            let! arch = getArch () |> Result.setError FailedToGetArch
+
+            return codename, os, arch
+        }

@@ -8,40 +8,48 @@ open System.Linq
 module Env =
 
     let setNvmFsNodeWin (home: string) =
-        let nvmfsnode = (IO.fullPath (home, [ "bin/" ]))
-        Environment.SetEnvironmentVariable(Common.EnvVars.NvmFsNode, nvmfsnode, EnvironmentVariableTarget.User)
+        let isEnvThere =
+            Environment.GetEnvironmentVariable(Common.EnvVars.NvmFsNode, EnvironmentVariableTarget.User)
+            |> Option.ofObj
 
-        let path =
-            let mapped =
-                Environment
-                    .GetEnvironmentVariables(EnvironmentVariableTarget.User)
-                    .Cast<DictionaryEntry>()
-                |> Seq.map (fun de -> string de.Key, string de.Value)
-                |> Map.ofSeq
+        match isEnvThere with
+        | Some value ->
+            let path =
+                TextPath(path = value)
+                    .SeparatorColor(Color.Yellow)
+                    .RootColor(Color.Yellow)
 
-            let values = (mapped.Item "Path").Split(';')
+            AnsiConsole.Markup $"[bold yellow]%%{Common.EnvVars.NvmFsNode}%%[/] is already set to: "
+            AnsiConsole.Write path
+            AnsiConsole.MarkupLine " nothing to do here."
 
-            values
-            |> Array.map
-                (fun pathValue ->
-                    if not
-                        (mapped
-                         |> Map.exists (fun _ value -> value = pathValue)) then
-                        pathValue
-                    else
-                        let value =
-                            mapped
-                            |> Seq.tryFind (fun entry -> entry.Value = pathValue)
+        | None ->
+            let nvmfshome = (IO.fullPath (home, []))
+            let nvmfsnode = (IO.fullPath (home, [ "bin/" ]))
+            let varHome = $"%%{Common.EnvVars.NvmFsHome}%%"
+            let varNode = $"%%{Common.EnvVars.NvmFsNode}%%"
 
-                        match value with
-                        | Some kvp -> $"%%{kvp.Key}%%"
-                        | None -> pathValue
+            AnsiConsole.MarkupLineInterpolated
+                $"Adding [bold yellow]{varHome}[/], [bold yellow]{varNode}[/] to the user env variables."
 
-                    )
-            |> Array.reduce (fun curr next -> $"{curr};{next}")
+            Environment.SetEnvironmentVariable(Common.EnvVars.NvmFsNode, nvmfsnode, EnvironmentVariableTarget.User)
+            Environment.SetEnvironmentVariable(Common.EnvVars.NvmFsHome, nvmfshome, EnvironmentVariableTarget.User)
 
-        Environment.SetEnvironmentVariable
-            ("PATH", $"%%{Common.EnvVars.NvmFsNode}%%;{path}", EnvironmentVariableTarget.User)
+            AnsiConsole.MarkupLine "In order to avoid re-writing your environment variables in [bold red]%PATH%[/]"
+
+            AnsiConsole.MarkupLineInterpolated
+                $"You will have to add [bold yellow]{varHome}[/], [bold yellow]{varNode}[/] to the [bold red]%%PATH%%[/] yourself"
+
+            AnsiConsole.Markup "For that you can run [bold red]SystemPropertiesAdvanced.exe[/] "
+            AnsiConsole.MarkupLine "click on the \"Environment Variables...\" button and add it to you user's PATH"
+
+            AnsiConsole.MarkupLineInterpolated
+                $"ex. C:\\DirA\\bin;C:\\dir b\\tools\\bin;[bold yellow]%%{Common.EnvVars.NvmFsNode}%%\\bin[/];"
+
+            AnsiConsole.MarkupLine
+                "Once you have done that, you will need to log out and log in (or restart)\nto let your system load the environment"
+
+
 
     let setNvmFsNodeUnix (home: string) =
         let nodepath = IO.fullPath (home, [ "bin/" ])
@@ -54,24 +62,24 @@ module Env =
         IO.appendToBashRc (lines)
 
 
-    let setEnvVersion (os: string) (versionBin: string) =
+    let setEnvVersion (os: CurrentOS) (versionBin: string) =
         let home = Common.getHome ()
 
         let nvmfsnode =
-            Environment.GetEnvironmentVariable(Common.EnvVars.NvmFsNode)
+            Environment.GetEnvironmentVariable(Common.EnvVars.NvmFsNode, EnvironmentVariableTarget.User)
             |> Option.ofObj
 
         match nvmfsnode with
         | Some node ->
             let result = IO.deleteSymlink node os
 
-            if result.ExitCode <> 0
-            then AnsiConsole.WriteLine($"Failed to delete symlink: {node} - [red]{result.StandardError}[/]")
+            if result.ExitCode <> 0 then
+                AnsiConsole.MarkupLineInterpolated($"Failed to delete symlink: {node} - [red]{result.StandardError}[/]")
 
-            IO.createSymlink versionBin (IO.fullPath (home, [ if os = "win" then "bin" ]))
+            IO.createSymlink versionBin (IO.fullPath (home, [ if os = Windows then "bin" ]))
         | None ->
             match os with
-            | "win" -> setNvmFsNodeWin home
+            | Windows -> setNvmFsNodeWin home
             | _ -> setNvmFsNodeUnix home
 
-            IO.createSymlink versionBin (IO.fullPath (home, [ if os = "win" then "bin" ]))
+            IO.createSymlink versionBin (IO.fullPath (home, [ if os = Windows then "bin" ]))

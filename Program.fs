@@ -10,8 +10,7 @@ module Main =
     [<EntryPoint>]
     let main argv =
 
-        let result =
-            Parser.Default.ParseArguments<Install, Use, List, Uninstall>(argv)
+        let result = Parser.Default.ParseArguments<Install, Use, List, Uninstall>(argv)
 
         let result =
             task {

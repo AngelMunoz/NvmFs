@@ -2,8 +2,8 @@ namespace NvmFs.Cmd
 
 open System
 open System.Threading.Tasks
-open FSharp.Control.Tasks
 open Spectre.Console
+open FsToolkit.ErrorHandling
 open CommandLine
 open NvmFs
 
@@ -59,33 +59,38 @@ module Actions =
             let (parsed, _) = System.Int32.TryParse(num)
             parsed
 
-    let private getInstallType (isLts: Nullable<bool>)
-                               (isCurrent: Nullable<bool>)
-                               (version: string)
-                               : Result<InstallType, string> =
+    let private getInstallType
+        (isLts: Nullable<bool>)
+        (isCurrent: Nullable<bool>)
+        (version: string)
+        : Result<InstallType, string> =
         let isLts = isLts |> Option.ofNullable
         let isCurrent = isCurrent |> Option.ofNullable
         let version = version |> Option.ofObj
 
         match isLts, isCurrent, version with
         | Some lts, None, None ->
-            if lts
-            then Ok LTS
-            else Result.Error "No valid version was presented"
+            if lts then
+                Ok LTS
+            else
+                Result.Error "No valid version was presented"
         | None, Some current, None ->
-            if current
-            then Ok Current
-            else Result.Error "No valid version was presented"
+            if current then
+                Ok Current
+            else
+                Result.Error "No valid version was presented"
         | None, None, Some version ->
             match version.Split(".") with
             | [| major |] ->
-                if validateVersion major
-                then Ok(SpecificM major)
-                else Result.Error $"{version} is not a valid node version"
+                if validateVersion major then
+                    Ok(SpecificM major)
+                else
+                    Result.Error $"{version} is not a valid node version"
             | [| major; minor |] ->
-                if validateVersion major && validateVersion minor
-                then Ok(SpecificMM(major, minor))
-                else Result.Error $"{version} is not a valid node version"
+                if validateVersion major && validateVersion minor then
+                    Ok(SpecificMM(major, minor))
+                else
+                    Result.Error $"{version} is not a valid node version"
             | [| major; minor; patch |] ->
                 if validateVersion major
                    && validateVersion minor
@@ -96,34 +101,29 @@ module Actions =
             | _ -> Result.Error $"{version} is not a valid node version"
         | _ -> Result.Error $"Use only one of --lts 'boolean', --current 'boolean', or --version 'string'"
 
-    let private setVersionAsDefault (version: string)
-                                    (codename: string)
-                                    (os: string)
-                                    (arch: string)
-                                    : Task<Result<unit, string>> =
-        task {
+    let private setVersionAsDefault (version: string) (codename: string) (os: CurrentOS) (arch: string) =
+        taskResult {
             let directory = Common.getVersionDirName version os arch
 
             let symlinkpath = IO.getSymlinkPath codename directory os
 
-            match Env.setEnvVersion os symlinkpath with
-            | Ok _ ->
+            do!
+                Env.setEnvVersion os symlinkpath
+                |> Result.mapError SymlinkError
+
+            match os with
+            | Windows -> ()
+            | Mac
+            | Linux ->
                 AnsiConsole.MarkupLine("[yellow]Setting permissions for node[/]")
 
-                match os with
-                | "win" -> return Ok()
-                | _ ->
-                    let! result = IO.trySetPermissionsUnix symlinkpath
-
-                    if result.ExitCode <> 0 then
-                        let errors =
-                            result.Errors
-                            |> List.fold (fun value next -> $"{value}\n{next}") ""
-
-                        return Result.Error($"[red]Error while setting permissions[/]: {errors}")
-                    else
-                        return Ok()
-            | Error err -> return Result.Error err
+                do!
+                    IO.trySetPermissionsUnix symlinkpath
+                    |> TaskResult.mapError (fun errors ->
+                        errors
+                        |> List.fold (fun value next -> $"{value}\n{next}") ""
+                        |> PermissionError)
+            | FreeBSD -> return! Result.Error UnsuppoertdOS
         }
 
     let private runPreInstallChecks () =
@@ -136,6 +136,54 @@ module Actions =
         }
         :> Task
 
+    let private tryCleanAfterDownload (checksums: string) (node: string) =
+        try
+            let dirname = IO.getParentDir checksums
+            IO.deleteFile node
+            IO.deleteFile checksums
+            IO.deleteDir dirname
+            Ok()
+        with
+        | ex -> Result.Error ex
+
+    let private downloadNodeAndChecksum (version: NodeVerItem) (setDefault: bool) =
+        taskResult {
+            let! codename, os, arch =
+                Common.getOsArchCodename version
+                |> Result.setError PlatformError
+
+            let! checksums = Network.downloadChecksumsForVersion $"{version.version}"
+            let! node = Network.downloadNode $"{version.version}" version.version os arch
+
+            AnsiConsole.MarkupLine $"[#5f5f00]Downloaded[/]: {checksums} - {node}"
+
+            let! checksum =
+                IO.getChecksumForVersion checksums version.version os arch
+                |> Result.requireSome ChecksumNotFound
+
+            do!
+                IO.verifyChecksum node checksum
+                |> Result.requireTrue ChecksumMissmatch
+                |> Result.teeError (fun _ ->
+                    AnsiConsole.MarkupLineInterpolated
+                        $"[bold red]The Checksums didnt match\ndownload: {IO.getChecksumForFile node}\nchecksum: None[/]")
+
+            let what = $"[yellow]{node}[/]"
+            let target = $"[yellow]{Common.getHome ()}/latest-{codename}[/]"
+
+            AnsiConsole.MarkupLine $"[#5f5f00]Extracting[/]: {what} to {target}"
+
+            IO.extractContents os node (IO.fullPath (Common.getHome (), [ $"latest-{codename}" ]))
+            AnsiConsole.MarkupLine "[green]Extraction Complete![/]"
+
+            if setDefault then
+                do!
+                    setVersionAsDefault version.version codename os arch
+                    |> TaskResult.mapError (fun err -> FailedToSetDefault err.Value)
+
+            return (checksums, node)
+        }
+
     let Install (options: Install) =
         task {
             do! runPreInstallChecks ()
@@ -144,81 +192,67 @@ module Actions =
 
             match getInstallType options.lts options.current options.version,
                   (Option.ofNullable options.isDefault
-                   |> Option.defaultValue false) with
+                   |> Option.defaultValue false)
+                with
             | Ok install, setAsDefault ->
                 let version = Common.getVersionItem versions install
 
                 match version with
-                | Some version ->
-                    let os = Common.getOS ()
-                    let arch = Common.getArch ()
-
-                    let codename = Common.getCodename version
-
-                    let! checksums = Network.downloadChecksumsForVersion $"{version.version}"
-                    let! node = Network.downloadNode $"{version.version}" version.version os arch
-                    AnsiConsole.MarkupLine $"[#5f5f00]Downloaded[/]: {checksums} - {node}"
-
-                    match IO.getChecksumForVersion checksums version.version os arch with
-                    | Some checksum ->
-                        if not (IO.verifyChecksum node checksum) then
-                            let compares =
-                                $"download: {IO.getChecksumForFile node}]\nchecksum: {checksum}"
-
-                            AnsiConsole.MarkupLine $"[bold red]The Checksums didnt match\n{compares}[/]"
-                            return 1
-                        else
-                            let what = $"[yellow]{node}[/]"
-
-                            let target =
-                                $"[yellow]{Common.getHome ()}/latest-{codename}[/]"
-
-                            AnsiConsole.MarkupLine $"[#5f5f00]Extracting[/]: {what} to {target}"
-
-                            IO.extractContents os node (IO.fullPath (Common.getHome (), [ $"latest-{codename}" ]))
-
-                            AnsiConsole.MarkupLine "[green]Extraction Complete![/]"
-
-                            let tryClean () =
-                                try
-                                    let dirname = IO.getParentDir checksums
-                                    IO.deleteFile node
-                                    IO.deleteFile checksums
-                                    IO.deleteDir dirname
-                                with ex ->
-#if DEBUG
-                                    AnsiConsole.WriteException(ex, ExceptionFormats.ShortenEverything)
-#endif
-                                ()
-
-                            if setAsDefault then
-                                let! result = setVersionAsDefault version.version codename os arch
-
-                                match result with
-                                | Ok () ->
-                                    AnsiConsole.MarkupLine
-                                        $"[bold green]Node version {version.version} installed and set as default[/]"
-
-                                    tryClean ()
-                                    return 0
-                                | Error err ->
-                                    AnsiConsole.MarkupLine err
-                                    return 1
-                            else
-                                return 0
-                    | None ->
-                        AnsiConsole.MarkupLine
-                            $"[bold red]The Checksums didnt match\ndownload: {IO.getChecksumForFile node}\nchecksum: None[/]"
-
-                        return 1
                 | None ->
                     AnsiConsole.MarkupLine "[bold red]Version Not found[/]"
                     return 1
+                | Some version ->
+                    let! downloadRes = downloadNodeAndChecksum version setAsDefault
+
+                    match downloadRes with
+                    | Ok (checksums, node) ->
+                        AnsiConsole.MarkupLine $"[bold green]Node version {version.version} installed[/]"
+
+                        if setAsDefault then
+                            AnsiConsole.MarkupLine $"[bold green]Set {version.version} as default[/]"
+
+                        match tryCleanAfterDownload checksums node with
+                        | Ok _ -> ()
+                        | Error ex ->
+#if DEBUG
+                            AnsiConsole.WriteException(ex, ExceptionFormats.ShortenPaths)
+#endif
+                            AnsiConsole.MarkupLineInterpolated $"[yellow]We could not clean the download ${ex}[/]"
+
+                        return 0
+                    | Error (FailedToSetDefault msg) ->
+                        AnsiConsole.MarkupLine $"[red]We could not set {version.version} as default: {msg}[/]"
+
+                        return 1
+                    | Error PlatformError ->
+                        AnsiConsole.MarkupLine
+                            $"[bold red]We were unable to get the current platform and architecture[/]"
+
+                        return 1
+                    | Error ChecksumNotFound
+                    | Error ChecksumMissmatch -> return 1
             | Result.Error err, _ ->
                 AnsiConsole.MarkupLine $"[bold red]{err}[/]"
                 return 1
         }
 
+
+    let private findAndSetVersion version =
+        taskResult {
+            let! codename, os, arch =
+                Common.getOsArchCodename version
+                |> Result.setError UseError.PlatformError
+
+            do!
+                IO.codenameExistsInDisk codename
+                |> Result.requireTrue (UseError.NodeNotInDisk codename)
+
+            AnsiConsole.MarkupLine $"[bold yellow]Setting version[/] [green]%s{version.version}[/]"
+
+            return!
+                setVersionAsDefault version.version codename os arch
+                |> TaskResult.mapError (fun err -> UseError.FailedToSetDefault err.Value)
+        }
 
     let Use (options: Use) =
         task {
@@ -233,26 +267,26 @@ module Actions =
                 match version with
                 | Some version ->
 
-                    let os = Common.getOS ()
-                    let arch = Common.getArch ()
+                    let! findAndSetResult = findAndSetVersion version
 
-                    let codename = Common.getCodename version
+                    match findAndSetResult with
+                    | Error UseError.PlatformError ->
+                        AnsiConsole.MarkupLine
+                            $"[bold red]We were unable to get the current platform and architecture[/]"
 
-                    if not (IO.codenameExistsInDisk codename) then
+                        return 1
+                    | Error (UseError.FailedToSetDefault msg) ->
+                        AnsiConsole.MarkupInterpolated
+                            $"[yellow]We could not set {version.version} as default: ${msg}[/]"
+
+                        return 1
+                    | Error (UseError.NodeNotInDisk codename) ->
                         let l1 = "[bold red]We didn't find version[/]"
                         let l2 = $"[bold yellow]%s{version.version}[/]"
                         AnsiConsole.MarkupLine $"{l1} {l2} within [bold yellow]%s{codename}[/]"
                         return 1
-                    else
-                        AnsiConsole.MarkupLine $"[bold yellow]Setting version[/] [green]%s{version.version}[/]"
-
-                        let! result = setVersionAsDefault version.version codename os arch
-
-                        match result with
-                        | Ok () ->
-                            AnsiConsole.MarkupLine $"[bold green]Node version {version.version} set as the default[/]"
-                        | Error err -> AnsiConsole.MarkupLine err
-
+                    | Ok _ ->
+                        AnsiConsole.MarkupLine $"[bold green]Node version {version.version} set as the default[/]"
                         return 0
                 | None ->
                     AnsiConsole.MarkupLine "[bold red]Version Not found[/]"
@@ -260,6 +294,34 @@ module Actions =
             | Error err ->
                 AnsiConsole.MarkupLine $"[bold red]{err}[/]"
                 return 1
+        }
+
+    let private doUninstall version =
+        result {
+            let! codename, os, arch =
+                Common.getOsArchCodename version
+                |> Result.setError UninstallError.PlatformError
+
+            do!
+                IO.codenameExistsInDisk codename
+                |> Result.requireTrue UninstallError.NodeNotInDisk
+
+            AnsiConsole.MarkupLine $"[yellow]Uninstalling version[/]: %s{version.version}"
+
+            let path =
+                IO.fullPath (
+                    Common.getHome (),
+                    [ $"latest-{codename}"
+                      Common.getVersionDirName version.version os arch ]
+                )
+
+            AnsiConsole.MarkupLine $"[yellow]Uninstalling version[/]: %s{version.version}"
+
+            try
+                IO.deleteDir path
+                return ()
+            with
+            | ex -> return! UninstallError.FailedToDelete ex |> Result.Error
         }
 
     let Uninstall (options: Uninstall) =
@@ -272,43 +334,31 @@ module Actions =
 
                 match version with
                 | Some version ->
+                    match doUninstall version with
+                    | Ok _ ->
+                        AnsiConsole.MarkupLine
+                            $"[green]Uninstalled Version[/] [bold yellow]%s{version.version}[/][green] successfully[/]"
 
-                    let os = Common.getOS ()
-                    let arch = Common.getArch ()
+                        return 0
+                    | Error UninstallError.PlatformError ->
+                        AnsiConsole.MarkupLine
+                            $"[bold red]We were unable to get the current platform and architecture[/]"
 
-                    let codename = Common.getCodename version
+                        return 1
+                    | Error UninstallError.NodeNotInDisk ->
+                        let l1 = $"[red]Version[/] [bold yellow]%s{version.version}[/]"
 
-                    if not (IO.versionExistsInDisk codename version.version) then
-                        let l1 =
-                            $"[red]Version[/] [bold yellow]%s{version.version}[/]"
-
-                        let l2 =
-                            $"[red]is not present in the system, aborting.[/]"
+                        let l2 = $"[red]is not present in the system, aborting.[/]"
 
                         AnsiConsole.MarkupLine $"{l1} {l2}"
                         return 1
-                    else
-                        AnsiConsole.MarkupLine $"[yellow]Uninstalling version[/]: %s{version.version}"
 
-                        let path =
-                            IO.fullPath
-                                (Common.getHome (),
-                                 [ $"latest-{codename}"
-                                   Common.getVersionDirName version.version os arch ])
-
-                        try
-                            IO.deleteDir path
-
-                            AnsiConsole.MarkupLine
-                                $"[green]Uninstalled Version[/] [bold yellow]%s{version.version}[/][green] successfully[/]"
-
-                            return 0
-                        with ex ->
-                            AnsiConsole.MarkupLine $"[bold red]Failed to delete {version.version}[/]"
+                    | Error (UninstallError.FailedToDelete ex) ->
+                        AnsiConsole.MarkupLine $"[bold red]Failed to delete {version.version}[/]"
 #if DEBUG
-                            AnsiConsole.WriteException(ex, ExceptionFormats.ShortenEverything)
+                        AnsiConsole.WriteException(ex, ExceptionFormats.ShortenPaths)
 #endif
-                            return 1
+                        return 1
                 | None ->
                     AnsiConsole.MarkupLine "[bold red]Version Not found[/]"
                     return 1
@@ -332,8 +382,15 @@ module Actions =
 
             let! currentVersion =
                 task {
-                    let! result = IO.getCurrentNodeVersion (Common.getOS ())
-                    if result.ExitCode <> 0 then return "" else return result.StandardOutput.Trim()
+                    match Common.getOSPlatform () with
+                    | Ok os ->
+                        let! result = IO.getCurrentNodeVersion os
+
+                        if result.ExitCode <> 0 then
+                            return ""
+                        else
+                            return result.StandardOutput.Trim()
+                    | Error err -> return ""
                 }
 
             let getVersionsTable (localVersions: string []) (remoteVersions: string [] option) =
@@ -341,18 +398,25 @@ module Actions =
 
                 let table =
                     Table()
-                        .AddColumns([| TableColumn("Local")
-                                       if remoteVersions.Length > 0 then TableColumn("Remote") |])
+                        .AddColumns(
+                            [| TableColumn("Local")
+                               if remoteVersions.Length > 0 then
+                                   TableColumn("Remote") |]
+                        )
 
                 table.Title <- TableTitle("Node Versions\n[green]* currently set as default[/]")
 
                 let longestLength =
-                    if localVersions.Length > remoteVersions.Length
-                    then localVersions.Length
-                    else remoteVersions.Length
+                    if localVersions.Length > remoteVersions.Length then
+                        localVersions.Length
+                    else
+                        remoteVersions.Length
 
                 let markCurrent (version: string) =
-                    if version.Contains(currentVersion) then $"[green]{version}*[/]" else version
+                    if version.Contains(currentVersion) then
+                        $"[green]{version}*[/]"
+                    else
+                        version
 
                 for i in 0 .. longestLength - 1 do
                     let localVersion =
@@ -360,13 +424,15 @@ module Actions =
                         |> Array.tryItem i
                         |> Option.defaultValue ""
 
-                    table.AddRow
-                        ([| markCurrent localVersion
-                            if remoteVersions.Length > 0 then
-                                markCurrent
-                                    (remoteVersions
-                                     |> Array.tryItem i
-                                     |> Option.defaultValue "") |])
+                    table.AddRow(
+                        [| markCurrent localVersion
+                           if remoteVersions.Length > 0 then
+                               markCurrent (
+                                   remoteVersions
+                                   |> Array.tryItem i
+                                   |> Option.defaultValue ""
+                               ) |]
+                    )
                     |> ignore
 
                 table
@@ -392,6 +458,6 @@ module Actions =
                 }
 
             let table = getVersionsTable local remote
-            AnsiConsole.Render table
+            AnsiConsole.Write table
             return 0
         }

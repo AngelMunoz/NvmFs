@@ -1,8 +1,6 @@
 namespace NvmFs
 
 open System.Net.Http
-open FSharp.Control.Tasks
-open IO
 open Spectre.Console
 
 module Network =
@@ -13,8 +11,7 @@ module Network =
             use http = new HttpClient()
             use! indexStr = http.GetStreamAsync(url)
 
-            use index =
-                openStreamForPath (fullPath (path, [ "index.json" ]))
+            use index = IO.openStreamForPath (IO.fullPath (path, [ "index.json" ]))
 
             do! indexStr.CopyToAsync(index)
             return index.Name
@@ -22,39 +19,40 @@ module Network =
 
     let downloadChecksumsForVersion (codename: string) =
         task {
-            let url =
-                $"{Common.getSrcBaseUrl ()}/{codename}/SHASUMS256.txt"
+            let url = $"{Common.getSrcBaseUrl ()}/{codename}/SHASUMS256.txt"
 
             use http = new HttpClient()
             use! checksumsStr = http.GetStreamAsync(url)
 
             use checksums =
-                let path =
-                    IO.fullPath (Common.getHome (), [ codename; "SHASUMS256.txt" ])
+                let path = IO.fullPath (Common.getHome (), [ codename; "SHASUMS256.txt" ])
 
-                openStreamForPath path
+                IO.openStreamForPath path
 
             do! checksumsStr.CopyToAsync(checksums)
             return checksums.Name
         }
 
-    let downloadNode (codename: string) (version: string) (os: string) (arch: string) =
+    let downloadNode (codename: string) (version: string) (os: CurrentOS) (arch: string) =
         task {
-            let extension = if os = "win" then ".zip" else ".tar.gz"
-            let filename = $"node-{version}-{os}-{arch}{extension}"
+            let extension =
+                if os = Windows then
+                    ".zip"
+                else
+                    ".tar.gz"
 
-            let url =
-                $"{Common.getSrcBaseUrl ()}/{codename}/{filename}"
+            let filename = $"{Common.getVersionDirName version os arch}{extension}"
+
+            let url = $"{Common.getSrcBaseUrl ()}/{codename}/{filename}"
 
             AnsiConsole.MarkupLine $"[#5f5f00]Downloading file[/]: {url}"
             use http = new HttpClient()
             use! str = http.GetStreamAsync(url)
 
             use file =
-                let path =
-                    IO.fullPath (Common.getHome (), [ codename; filename ])
+                let path = IO.fullPath (Common.getHome (), [ codename; filename ])
 
-                openStreamForPath path
+                IO.openStreamForPath path
 
             do! str.CopyToAsync(file)
             return file.Name

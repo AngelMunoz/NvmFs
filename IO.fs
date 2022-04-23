@@ -5,19 +5,22 @@ open System.IO
 open System.IO.Compression
 open System.Runtime.InteropServices
 open System.Security.Cryptography
+open NvmFs
 open SharpCompress.Common
 open SharpCompress.Readers
 open CliWrap
 open CliWrap.Buffered
 open Thoth.Json.Net
-open FSharp.Control.Tasks
 open Spectre.Console
 open System.Threading.Tasks
 
+
 module IO =
     let createSymlink (actualPath: string) (symbolicLink: string) =
-        if (RuntimeInformation.IsOSPlatform OSPlatform.Linux
-            || RuntimeInformation.IsOSPlatform OSPlatform.OSX) then
+        let os = Common.getOSPlatform ()
+
+        match os with
+        | Common.IsMacOrLinux ->
             let symbolicLinkDirectory = Path.GetDirectoryName(symbolicLink)
 
             if not (Directory.Exists(symbolicLinkDirectory)) then
@@ -25,46 +28,51 @@ module IO =
                 |> ignore
 
             let result =
-                Cli
-                    .Wrap("ln")
-                    .WithArguments($"-s {actualPath} {symbolicLink}")
-                    .WithValidation(CommandResultValidation.None)
+                Cli.Wrap("ln").WithArguments(
+                    $"-s {actualPath} {symbolicLink}"
+                )
+                    .WithValidation(
+                    CommandResultValidation.None
+                )
                     .ExecuteBufferedAsync()
                     .Task
                 |> Async.AwaitTask
                 |> Async.RunSynchronously
 
-            if result.ExitCode <> 0
-            then Result.Error $"[#d78700]Error while creating symlinks[/]:\n[#ff8700]{result.StandardError}[/]"
-            else Ok()
-        else
-
-        if (RuntimeInformation.IsOSPlatform OSPlatform.Windows) then
-            /// **NOTE**: This requires DevMode enabled on Windows10
+            if result.ExitCode <> 0 then
+                Result.Error $"[#d78700]Error while creating symlinks[/]:\n[#ff8700]{result.StandardError}[/]"
+            else
+                Ok()
+        | Common.IsWindows ->
             let result =
-                Cli
-                    .Wrap("cmd.exe")
-                    .WithArguments($"""/C "mklink /d {symbolicLink} {actualPath}" """)
-                    .WithValidation(CommandResultValidation.None)
+                Cli.Wrap("cmd.exe").WithArguments(
+                    $"""/C "mklink /j {symbolicLink} {actualPath}" """
+                )
+                    .WithValidation(
+                    CommandResultValidation.None
+                )
                     .ExecuteBufferedAsync()
                     .Task
                 |> Async.AwaitTask
                 |> Async.RunSynchronously
 
-            if result.ExitCode <> 0
-            then Result.Error $"[#d78700]Error while creating symlinks[/]:\n[#ff8700]{result.StandardError}[/]"
-            else Ok()
-        else
+            if result.ExitCode <> 0 then
+                Result.Error $"[#d78700]Error while creating symlinks[/]:\n[#ff8700]{result.StandardError}[/]"
+            else
+                Ok()
+        | Common.Unsupported value ->
             Result.Error
                 $"Could not write symlink {symbolicLink} -> {actualPath}, for more information please see https://github.com/dotnet/runtime/issues/24271"
 
     let trySetPermissionsUnix (dir: string) =
         task {
             let! dirPerm =
-                Cli
-                    .Wrap("chmod")
-                    .WithArguments($"-R +x {dir}")
-                    .WithValidation(CommandResultValidation.None)
+                Cli.Wrap("chmod").WithArguments(
+                    $"-R +x {dir}"
+                )
+                    .WithValidation(
+                    CommandResultValidation.None
+                )
                     .ExecuteBufferedAsync()
                     .Task
 
@@ -72,13 +80,12 @@ module IO =
                 let dirs = Directory.EnumerateFiles(dir)
 
                 dirs
-                |> Seq.map
-                    (fun file ->
-                        Cli
-                            .Wrap("chmod")
-                            .WithArguments($"+x {file}")
-                            .ExecuteBufferedAsync()
-                            .Task)
+                |> Seq.map (fun file ->
+                    Cli.Wrap("chmod").WithArguments(
+                        $"+x {file}"
+                    )
+                        .ExecuteBufferedAsync()
+                        .Task)
 
             let! children = Task.WhenAll(childPerm)
 
@@ -90,9 +97,10 @@ module IO =
                 [ dirPerm.StandardError
                   yield! children |> Seq.map (fun res -> res.StandardError) ]
 
-            return
-                {| ExitCode = dirPerm.ExitCode + exitCodes
-                   Errors = errors |}
+            if (dirPerm.ExitCode + exitCodes) <> 0 then
+                return Error errors
+            else
+                return Ok()
         }
 
     let private symLinkDelegate (symbolicLink: string) (actualPath: string) =
@@ -100,14 +108,17 @@ module IO =
         | Ok () -> ()
         | Error err -> AnsiConsole.MarkupLine err
 
-    let extractContents (os: string) (source: string) (output: string) =
+    let extractContents (os: CurrentOS) (source: string) (output: string) =
         match os with
-        | "win" ->
+        | Windows ->
             try
                 ZipFile.ExtractToDirectory(source, output)
-            with :? System.IO.IOException as ex ->
-                if ex.Message.Contains("already exists.")
-                   || ex.InnerException.Message.Contains("already exists") then
+            with
+            | :? IOException as ex ->
+                if
+                    ex.Message.Contains("already exists.")
+                    || ex.InnerException.Message.Contains("already exists")
+                then
                     ()
                 else
                     reraise ()
@@ -141,7 +152,7 @@ module IO =
         file.OpenWrite()
 
     let createHomeDir () =
-        let dir = NvmFs.Common.getHome ()
+        let dir = Common.getHome ()
 
         Directory.CreateDirectory(dir)
 
@@ -151,34 +162,41 @@ module IO =
         let file = FileInfo(file)
         file.DirectoryName
 
-    let deleteSymlink (path: string) (os: string) =
+    let deleteSymlink (path: string) (os: CurrentOS) =
         let cmd =
             match os with
-            | "win" ->
+            | Windows ->
                 Cli
                     .Wrap("cmd.exe")
                     .WithArguments($"""/C rmdir {path}""")
             | _ ->
                 Cli
                     .Wrap("unlink")
-                    .WithArguments($"""{if path.EndsWith("/") then path.Substring(0, path.Length - 1) else path}""")
+                    .WithArguments(
+                        $"""{if path.EndsWith("/") then
+                                 path.Substring(0, path.Length - 1)
+                             else
+                                 path}"""
+                    )
 
         cmd
-            .WithValidation(CommandResultValidation.None)
+            .WithValidation(
+                CommandResultValidation.None
+            )
             .ExecuteBufferedAsync()
             .Task
         |> Async.AwaitTask
         |> Async.RunSynchronously
 
-    let getCurrentNodeVersion (os: string) =
+    let getCurrentNodeVersion (os: CurrentOS) =
         let cmd =
             match os with
-            | "win" -> Cli.Wrap("node.exe")
+            | Windows -> Cli.Wrap("node.exe")
             | _ -> Cli.Wrap("node")
 
-        cmd
-            .WithArguments("--version")
-            .WithValidation(CommandResultValidation.None)
+        cmd.WithArguments("--version").WithValidation(
+            CommandResultValidation.None
+        )
             .ExecuteBufferedAsync()
             .Task
 
@@ -194,12 +212,12 @@ module IO =
         let paths = path :: paths
         Path.GetFullPath(Path.Combine(paths |> Array.ofList))
 
-    let getSymlinkPath (codename: string) (directory: string) (os: string) =
+    let getSymlinkPath (codename: string) (directory: string) (os: CurrentOS) =
         fullPath (
             Common.getHome (),
             [ $"latest-{codename}"
               $"{directory}"
-              if os = "win" then "" else "bin" ]
+              if os = Windows then "" else "bin" ]
         )
 
 
@@ -207,8 +225,7 @@ module IO =
         task {
             let path = Common.getHome ()
 
-            use file =
-                File.OpenText(fullPath (path, [ "index.json" ]))
+            use file = File.OpenText(fullPath (path, [ "index.json" ]))
 
             let! content = file.ReadToEndAsync()
 
@@ -222,14 +239,14 @@ module IO =
         let file = FileInfo(file)
         file.FullName.Substring(0, file.FullName.Length - file.Extension.Length)
 
-    let getChecksumForVersion (checksumfile: string) (version: string) (os: string) (arch: string) =
+    let getChecksumForVersion (checksumfile: string) (version: string) (os: CurrentOS) (arch: string) =
         let line =
             let ext =
                 match os with
-                | "win" -> "zip"
+                | Windows -> "zip"
                 | _ -> "tar.gz"
 
-            $"node-{version}-{os}-{arch}.{ext}"
+            $"{Common.getVersionDirName version os arch}.{ext}"
 
         let file = FileInfo(checksumfile)
         use file = file.OpenText()

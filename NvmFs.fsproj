@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <Summary>
       A Super Simple Node Version Manager Written in F#
     </Summary>
@@ -29,13 +29,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CliWrap" Version="3.2.4" />
+    <PackageReference Include="CliWrap" Version="3.4.3" />
     <PackageReference Include="CommandLineParser" Version="2.8.0" />
     <PackageReference Include="CommandLineParser.FSharp" Version="2.8.0" />
-    <PackageReference Include="Ply" Version="0.3.1" />
-    <PackageReference Include="sharpcompress" Version="0.26.0" />
-    <PackageReference Include="Spectre.Console" Version="0.33.0" />
-    <PackageReference Include="Thoth.Json.Net" Version="5.0.0" />
+    <PackageReference Include="FsToolkit.ErrorHandling" Version="2.13.0" />
+    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" Version="2.13.0" />
+    <PackageReference Include="sharpcompress" Version="0.31.0" />
+    <PackageReference Include="Spectre.Console" Version="0.44.0" />
+    <PackageReference Include="Thoth.Json.Net" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
