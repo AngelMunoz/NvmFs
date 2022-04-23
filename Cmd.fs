@@ -1,10 +1,11 @@
 namespace NvmFs.Cmd
+#nowarn "3391"
 
+open CommandLine
 open System
 open System.Threading.Tasks
 open Spectre.Console
 open FsToolkit.ErrorHandling
-open CommandLine
 open NvmFs
 
 
@@ -51,7 +52,7 @@ type List =
 
 [<RequireQualifiedAccess>]
 module Actions =
-    let private validateVersion (num: string) =
+    let validateVersion (num: string) =
         if num.IndexOf('v') = 0 then
             let (parsed, _) = num.Substring 1 |> System.Int32.TryParse
             parsed
@@ -59,7 +60,7 @@ module Actions =
             let (parsed, _) = System.Int32.TryParse(num)
             parsed
 
-    let private getInstallType
+    let getInstallType
         (isLts: Nullable<bool>)
         (isCurrent: Nullable<bool>)
         (version: string)
@@ -101,7 +102,7 @@ module Actions =
             | _ -> Result.Error $"{version} is not a valid node version"
         | _ -> Result.Error $"Use only one of --lts 'boolean', --current 'boolean', or --version 'string'"
 
-    let private setVersionAsDefault (version: string) (codename: string) (os: CurrentOS) (arch: string) =
+    let setVersionAsDefault (version: string) (codename: string) (os: CurrentOS) (arch: string) =
         taskResult {
             let directory = Common.getVersionDirName version os arch
 
@@ -126,7 +127,7 @@ module Actions =
             | FreeBSD -> return! Result.Error UnsuppoertdOS
         }
 
-    let private runPreInstallChecks () =
+    let runPreInstallChecks () =
         let homedir = IO.createHomeDir ()
         AnsiConsole.MarkupLine("[bold yellow]Updating node versions[/]")
 
@@ -136,7 +137,7 @@ module Actions =
         }
         :> Task
 
-    let private tryCleanAfterDownload (checksums: string) (node: string) =
+    let tryCleanAfterDownload (checksums: string) (node: string) =
         try
             let dirname = IO.getParentDir checksums
             IO.deleteFile node
@@ -146,7 +147,7 @@ module Actions =
         with
         | ex -> Result.Error ex
 
-    let private downloadNodeAndChecksum (version: NodeVerItem) (setDefault: bool) =
+    let downloadNodeAndChecksum (version: NodeVerItem) (setDefault: bool) =
         taskResult {
             let! codename, os, arch =
                 Common.getOsArchCodename version
@@ -236,8 +237,17 @@ module Actions =
                 return 1
         }
 
+    let installHandler (version: string, lts: bool Nullable, current: bool Nullable, isDefault: bool) = 
+        Install 
+            {
+                Install.version = version
+                Install.lts = lts
+                Install.current = current
+                Install.isDefault = isDefault
+            }
 
-    let private findAndSetVersion version =
+
+    let findAndSetVersion version =
         taskResult {
             let! codename, os, arch =
                 Common.getOsArchCodename version
@@ -296,7 +306,7 @@ module Actions =
                 return 1
         }
 
-    let private doUninstall version =
+    let doUninstall version =
         result {
             let! codename, os, arch =
                 Common.getOsArchCodename version
