@@ -1,5 +1,4 @@
 namespace NvmFs.Cmd
-#nowarn "3391"
 
 open CommandLine
 open System
@@ -236,16 +235,6 @@ module Actions =
                 AnsiConsole.MarkupLine $"[bold red]{err}[/]"
                 return 1
         }
-
-    let installHandler (version: string, lts: bool Nullable, current: bool Nullable, isDefault: bool) = 
-        Install 
-            {
-                Install.version = version
-                Install.lts = lts
-                Install.current = current
-                Install.isDefault = isDefault
-            }
-
 
     let findAndSetVersion version =
         taskResult {

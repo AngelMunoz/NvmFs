@@ -25,6 +25,7 @@
     <Compile Include="Network.fs" />
     <Compile Include="Env.fs" />
     <Compile Include="Cmd.fs" />
+    <Compile Include="Handlers.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

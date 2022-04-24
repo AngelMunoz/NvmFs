@@ -1,7 +1,7 @@
+module NvmFs.Main
+
 open System
 open FSharp.SystemCommandLine
-open FSharp.Control.Tasks
-open NvmFs.Cmd
 open System.Threading.Tasks
 
 let installCommand =
@@ -13,7 +13,7 @@ let installCommand =
     command "install" {
         description "Installs the specified node version or the latest LTS by default"
         inputs (version, lts, current, isDefault)
-        setHandler Actions.installHandler
+        setHandler Handlers.installHandler
     }
 
 [<EntryPoint>]
