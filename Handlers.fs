@@ -4,7 +4,7 @@
 open System
 open NvmFs.Cmd
 
-let installHandler (version: string, lts: bool Nullable, current: bool Nullable, isDefault: bool) = 
+let installHandler (version: string option, lts: bool Nullable, current: bool Nullable, isDefault: bool) = 
     Actions.Install
         {
             Install.version = version
@@ -13,13 +13,13 @@ let installHandler (version: string, lts: bool Nullable, current: bool Nullable,
             Install.isDefault = isDefault
         }
 
-let uninstallHandler (version: string) = 
+let uninstallHandler (version: string option) = 
     Actions.Uninstall
         {
             Uninstall.version = version
         }
 
-let useHandler (version: string, lts: bool Nullable, current: bool Nullable) = 
+let useHandler (version: string option, lts: bool Nullable, current: bool Nullable) = 
     Actions.Use
         {
             Use.version = version

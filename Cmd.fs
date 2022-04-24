@@ -11,7 +11,7 @@ open NvmFs
 [<Verb("install", HelpText = "Installs the specified node version or the latest LTS by default")>]
 type Install =
     { [<Option('n', "node", Group = "version", HelpText = "Installs the specified node version")>]
-      version: string
+      version: string option
       [<Option('l', "lts", Group = "version", HelpText = "Ignores version and pulls down the latest LTS version")>]
       lts: Nullable<bool>
       [<Option('c', "current", Group = "version", HelpText = "Ignores version and pulls down the latest Current version")>]
@@ -22,12 +22,12 @@ type Install =
 [<Verb("uninstall", HelpText = "Uninstalls the specified node version")>]
 type Uninstall =
     { [<Option('n', "node", Required = true, HelpText = "Removes the specified node version")>]
-      version: string }
+      version: string option }
 
 [<Verb("use", HelpText = "Sets the Node Version")>]
 type Use =
     { [<Option('n', "node", Group = "version", HelpText = "sets the specified node version in the PATH")>]
-      version: string
+      version: string option
       [<Option('l',
                "lts",
                Group = "version",
@@ -62,11 +62,10 @@ module Actions =
     let getInstallType
         (isLts: Nullable<bool>)
         (isCurrent: Nullable<bool>)
-        (version: string)
+        (version: string option)
         : Result<InstallType, string> =
         let isLts = isLts |> Option.ofNullable
         let isCurrent = isCurrent |> Option.ofNullable
-        let version = version |> Option.ofObj
 
         match isLts, isCurrent, version with
         | Some lts, None, None ->
@@ -190,10 +189,7 @@ module Actions =
 
             let! versions = IO.getIndex ()
 
-            match getInstallType options.lts options.current options.version,
-                  (Option.ofNullable options.isDefault
-                   |> Option.defaultValue false)
-                with
+            match getInstallType options.lts options.current options.version, (Option.ofNullable options.isDefault |> Option.defaultValue false) with
             | Ok install, setAsDefault ->
                 let version = Common.getVersionItem versions install
 

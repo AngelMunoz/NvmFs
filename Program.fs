@@ -3,9 +3,10 @@ module NvmFs.Main
 open System
 open FSharp.SystemCommandLine
 open System.Threading.Tasks
+open System.CommandLine
 
 let installCommand =
-    let version = Input.Argument<string>("version", "", "Installs the specified node version")
+    let version = Input.ArgumentMaybe<string>("version", "Installs the specified node version")
     let lts = Input.Option<bool Nullable>(["-l"; "--lts"], Nullable(), "Ignores version and pulls down the latest LTS version")
     let current = Input.Option<bool Nullable>(["-c"; "--current"], Nullable(), "Ignores version and pulls down the latest Current version")
     let isDefault = Input.Option<bool>(["-d"; "--default"], false, "Sets the downloaded version as default (default: false)")
@@ -17,7 +18,7 @@ let installCommand =
     }
 
 let uninstallCommand = 
-    let version = Input.Argument<string>("version", "", "Installs the specified node version")
+    let version = Input.ArgumentMaybe<string>("version", "Installs the specified node version")
 
     command "uninstall" {
         description "Uninstalls the specified node version"
@@ -26,7 +27,7 @@ let uninstallCommand =
     }
 
 let useCommand =
-    let version = Input.Argument<string>("version", "", "Installs the specified node version")
+    let version = Input.ArgumentMaybe<string>("version", "Installs the specified node version")
     let lts = Input.Option<bool Nullable>(["-l"; "--lts"], Nullable(), "Ignores version and pulls down the latest LTS version")
     let current = Input.Option<bool Nullable>(["-c"; "--current"], Nullable(), "Ignores version and pulls down the latest Current version")
 
