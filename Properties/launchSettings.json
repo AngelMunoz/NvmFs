@@ -2,7 +2,7 @@
   "profiles": {
     "NvmFs": {
       "commandName": "Project",
-      "commandLineArgs": "install 8.16.2"
+      "commandLineArgs": "use --lts"
     }
   }
 }

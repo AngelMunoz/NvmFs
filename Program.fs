@@ -16,16 +16,49 @@ let installCommand =
         setHandler Handlers.installHandler
     }
 
+let uninstallCommand = 
+    let version = Input.Argument<string>("version", "", "Installs the specified node version")
+
+    command "uninstall" {
+        description "Uninstalls the specified node version"
+        inputs version
+        setHandler Handlers.uninstallHandler
+    }
+
+let useCommand =
+    let version = Input.Argument<string>("version", "", "Installs the specified node version")
+    let lts = Input.Option<bool Nullable>(["-l"; "--lts"], Nullable(), "Ignores version and pulls down the latest LTS version")
+    let current = Input.Option<bool Nullable>(["-c"; "--current"], Nullable(), "Ignores version and pulls down the latest Current version")
+
+    command "use" {
+        description "Sets the Node Version"
+        inputs (version, lts, current)
+        setHandler Handlers.useHandler
+    }
+
+let listCommand = 
+    let remote = Input.Option<bool Nullable>(["-r"; "--remote"], Nullable(), "Displays the last downloaded version index in the console")
+    let updateIndex = Input.Option<bool Nullable>(["-u"; "--update"], Nullable(), "Use together with --remote, pulls the version index from the node website")
+
+    command "list" {
+        description "Shows the available node versions"
+        inputs (remote, updateIndex)
+        setHandler Handlers.listHandler
+    }
+
 [<EntryPoint>]
 let main argv = 
     rootCommand argv {
         description "nvmfs"
         setHandler Task.FromResult
         addCommand installCommand
+        addCommand uninstallCommand
+        addCommand useCommand
+        addCommand listCommand
     }
     |> Async.AwaitTask
     |> Async.RunSynchronously
-        
+
 
 //[<EntryPoint>]
 //let main argv =

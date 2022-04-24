@@ -12,3 +12,25 @@ let installHandler (version: string, lts: bool Nullable, current: bool Nullable,
             Install.current = current
             Install.isDefault = isDefault
         }
+
+let uninstallHandler (version: string) = 
+    Actions.Uninstall
+        {
+            Uninstall.version = version
+        }
+
+let useHandler (version: string, lts: bool Nullable, current: bool Nullable) = 
+    Actions.Use
+        {
+            Use.version = version
+            Use.lts = lts
+            Use.current = current
+        }
+    
+let listHandler (remote: bool Nullable, updateIndex: bool Nullable) = 
+    Actions.List 
+        {
+            List.remote = remote
+            List.updateIndex = updateIndex
+        }
+
