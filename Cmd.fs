@@ -13,11 +13,11 @@ type Install =
     { [<Option('n', "node", Group = "version", HelpText = "Installs the specified node version")>]
       version: string option
       [<Option('l', "lts", Group = "version", HelpText = "Ignores version and pulls down the latest LTS version")>]
-      lts: Nullable<bool>
+      lts: bool option
       [<Option('c', "current", Group = "version", HelpText = "Ignores version and pulls down the latest Current version")>]
-      current: Nullable<bool>
+      current: bool option
       [<Option('d', "default", Required = false, HelpText = "Sets the downloaded version as default (default: false)")>]
-      isDefault: Nullable<bool> }
+      isDefault: bool }
 
 [<Verb("uninstall", HelpText = "Uninstalls the specified node version")>]
 type Uninstall =
@@ -32,22 +32,22 @@ type Use =
                "lts",
                Group = "version",
                HelpText = "Ignores version and sets the latest downloaded LTS version in the PATH")>]
-      lts: Nullable<bool>
+      lts: bool option
       [<Option('c',
                "current",
                Group = "version",
                HelpText = "Ignores version and sets the latest downloaded Current version in the PATH")>]
-      current: Nullable<bool> }
+      current: bool option }
 
 [<Verb("list", HelpText = "Shows the available node versions")>]
 type List =
     { [<Option('r', "remote", Required = false, HelpText = "Displays the last downloaded version index in the console")>]
-      remote: Nullable<bool>
+      remote: bool option
       [<Option('u',
                "update",
                Required = false,
                HelpText = "Use together with --remote, pulls the version index from the node website")>]
-      updateIndex: Nullable<bool> }
+      updateIndex: bool option }
 
 [<RequireQualifiedAccess>]
 module Actions =
@@ -59,13 +59,7 @@ module Actions =
             let (parsed, _) = System.Int32.TryParse(num)
             parsed
 
-    let getInstallType
-        (isLts: Nullable<bool>)
-        (isCurrent: Nullable<bool>)
-        (version: string option)
-        : Result<InstallType, string> =
-        let isLts = isLts |> Option.ofNullable
-        let isCurrent = isCurrent |> Option.ofNullable
+    let getInstallType (isLts: bool option) (isCurrent: bool option) (version: string option) : Result<InstallType, string> =
 
         match isLts, isCurrent, version with
         | Some lts, None, None ->
@@ -189,7 +183,7 @@ module Actions =
 
             let! versions = IO.getIndex ()
 
-            match getInstallType options.lts options.current options.version, (Option.ofNullable options.isDefault |> Option.defaultValue false) with
+            match getInstallType options.lts options.current options.version, options.isDefault with
             | Ok install, setAsDefault ->
                 let version = Common.getVersionItem versions install
 
@@ -323,7 +317,7 @@ module Actions =
         task {
             let! versions = IO.getIndex ()
 
-            match getInstallType (Nullable<bool>()) (Nullable<bool>()) options.version with
+            match getInstallType None None options.version with
             | Ok install ->
                 let version = Common.getVersionItem versions install
 
@@ -366,13 +360,11 @@ module Actions =
         task {
             let checkRemote =
                 options.remote
-                |> Option.ofNullable
                 |> Option.defaultValue false
 
             let updateIndex =
                 checkRemote
                 && (options.updateIndex
-                    |> Option.ofNullable
                     |> Option.defaultValue false)
 
             let! currentVersion =

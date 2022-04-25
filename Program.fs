@@ -1,20 +1,21 @@
 module NvmFs.Main
 
-open System
 open FSharp.SystemCommandLine
 open System.Threading.Tasks
-open System.CommandLine
+open NvmFs.Cmd
 
 let installCommand =
     let version = Input.ArgumentMaybe<string>("version", "Installs the specified node version")
-    let lts = Input.Option<bool Nullable>(["-l"; "--lts"], Nullable(), "Ignores version and pulls down the latest LTS version")
-    let current = Input.Option<bool Nullable>(["-c"; "--current"], Nullable(), "Ignores version and pulls down the latest Current version")
-    let isDefault = Input.Option<bool>(["-d"; "--default"], false, "Sets the downloaded version as default (default: false)")
+    let lts = Input.OptionMaybe<bool>(["-l"; "--lts"], "Ignores version and pulls down the latest LTS version")
+    let current = Input.OptionMaybe<bool>(["-c"; "--current"], "Ignores version and pulls down the latest Current version")
+    let isDefault = Input.Option<bool>(["-d"; "--default"], false, "Sets the downloaded version as default")
 
     command "install" {
         description "Installs the specified node version or the latest LTS by default"
         inputs (version, lts, current, isDefault)
-        setHandler Handlers.installHandler
+        setHandler (fun (version, lts, current, isDefault) ->
+            Actions.Install { version = version; lts = lts; current = current; isDefault = isDefault }
+        )
     }
 
 let uninstallCommand = 
@@ -23,28 +24,34 @@ let uninstallCommand =
     command "uninstall" {
         description "Uninstalls the specified node version"
         inputs version
-        setHandler Handlers.uninstallHandler
+        setHandler (fun (version) ->
+            Actions.Uninstall { version = version }
+        )
     }
 
 let useCommand =
     let version = Input.ArgumentMaybe<string>("version", "Installs the specified node version")
-    let lts = Input.Option<bool Nullable>(["-l"; "--lts"], Nullable(), "Ignores version and pulls down the latest LTS version")
-    let current = Input.Option<bool Nullable>(["-c"; "--current"], Nullable(), "Ignores version and pulls down the latest Current version")
+    let lts = Input.OptionMaybe<bool>(["-l"; "--lts"], "Ignores version and pulls down the latest LTS version")
+    let current = Input.OptionMaybe<bool>(["-c"; "--current"], "Ignores version and pulls down the latest Current version")
 
     command "use" {
         description "Sets the Node Version"
         inputs (version, lts, current)
-        setHandler Handlers.useHandler
+        setHandler (fun (version, lts, current) ->
+            Actions.Use { version = version; lts = lts; current = current }
+        )
     }
 
 let listCommand = 
-    let remote = Input.Option<bool Nullable>(["-r"; "--remote"], Nullable(), "Displays the last downloaded version index in the console")
-    let updateIndex = Input.Option<bool Nullable>(["-u"; "--update"], Nullable(), "Use together with --remote, pulls the version index from the node website")
+    let remote = Input.OptionMaybe<bool>(["-r"; "--remote"], "Displays the last downloaded version index in the console")
+    let updateIndex = Input.OptionMaybe<bool>(["-u"; "--update"], "Use together with --remote, pulls the version index from the node website")
 
     command "list" {
         description "Shows the available node versions"
         inputs (remote, updateIndex)
-        setHandler Handlers.listHandler
+        setHandler (fun (remote, updateIndex) ->
+            Actions.List { remote = remote; updateIndex = updateIndex }
+        )
     }
 
 [<EntryPoint>]
