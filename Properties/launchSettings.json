@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "NvmFs": {
+      "commandName": "Project",
+      "commandLineArgs": "use --lts"
+    }
+  }
+}
