@@ -8,7 +8,7 @@ open NvmFs
 
 [<RequireQualifiedAccess>]
 module Actions =
-    let validateVersion (num: string) =
+    let private validateVersion (num: string) =
         if num.IndexOf('v') = 0 then
             let (parsed, _) = num.Substring 1 |> System.Int32.TryParse
             parsed
@@ -16,7 +16,11 @@ module Actions =
             let (parsed, _) = System.Int32.TryParse(num)
             parsed
 
-    let getInstallType (isLts: bool option) (isCurrent: bool option) (version: string option) : Result<InstallType, string> =
+    let private validateVersionGroup (version: string option, lts: bool option, current: bool option) = 
+        if [version.IsSome; lts.IsSome; current.IsSome] |> List.filter id |> List.length > 1 
+        then failwith "Can only have one of 'version', '--lts' or '--current'."
+
+    let private getInstallType (isLts: bool option) (isCurrent: bool option) (version: string option) : Result<InstallType, string> =
 
         match isLts, isCurrent, version with
         | Some lts, None, None ->
@@ -51,7 +55,7 @@ module Actions =
             | _ -> Result.Error $"{version} is not a valid node version"
         | _ -> Result.Error $"Use only one of --lts 'boolean', --current 'boolean', or --version 'string'"
 
-    let setVersionAsDefault (version: string) (codename: string) (os: CurrentOS) (arch: string) =
+    let private setVersionAsDefault (version: string) (codename: string) (os: CurrentOS) (arch: string) =
         taskResult {
             let directory = Common.getVersionDirName version os arch
 
@@ -76,7 +80,7 @@ module Actions =
             | FreeBSD -> return! Result.Error UnsuppoertdOS
         }
 
-    let runPreInstallChecks () =
+    let private runPreInstallChecks () =
         let homedir = IO.createHomeDir ()
         AnsiConsole.MarkupLine("[bold yellow]Updating node versions[/]")
 
@@ -86,7 +90,7 @@ module Actions =
         }
         :> Task
 
-    let tryCleanAfterDownload (checksums: string) (node: string) =
+    let private tryCleanAfterDownload (checksums: string) (node: string) =
         try
             let dirname = IO.getParentDir checksums
             IO.deleteFile node
@@ -96,7 +100,7 @@ module Actions =
         with
         | ex -> Result.Error ex
 
-    let downloadNodeAndChecksum (version: NodeVerItem) (setDefault: bool) =
+    let private downloadNodeAndChecksum (version: NodeVerItem) (setDefault: bool) =
         taskResult {
             let! codename, os, arch =
                 Common.getOsArchCodename version
@@ -133,10 +137,6 @@ module Actions =
 
             return (checksums, node)
         }
-
-    let validateVersionGroup (version: string option, lts: bool option, current: bool option) = 
-        if [version.IsSome; lts.IsSome; current.IsSome] |> List.filter id |> List.length > 1 
-        then failwith "Can only have one of 'version', '--lts' or '--current'."
 
     let Install (version: string option, lts: bool option, current: bool option, isDefault: bool) =
         task {
