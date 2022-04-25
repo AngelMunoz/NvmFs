@@ -134,8 +134,13 @@ module Actions =
             return (checksums, node)
         }
 
+    let validateVersionGroup (version: string option, lts: bool option, current: bool option) = 
+        if [version.IsSome; lts.IsSome; current.IsSome] |> List.filter id |> List.length > 1 
+        then failwith "Can only have one of 'version', '--lts' or '--current'."
+
     let Install (version: string option, lts: bool option, current: bool option, isDefault: bool) =
         task {
+            validateVersionGroup (version, lts, current)
             do! runPreInstallChecks ()
 
             let! versions = IO.getIndex ()
@@ -201,7 +206,8 @@ module Actions =
         }
 
     let Use (version: string option, lts: bool option, current: bool option) =
-        task {
+        task {            
+            validateVersionGroup (version, lts, current)
             AnsiConsole.MarkupLine $"[bold yellow]Checking local versions[/]"
 
             let! versions = IO.getIndex ()
