@@ -13,9 +13,7 @@ let installCommand =
     command "install" {
         description "Installs the specified node version or the latest LTS by default"
         inputs (version, lts, current, isDefault)
-        setHandler (fun (version, lts, current, isDefault) ->
-            Actions.Install { version = version; lts = lts; current = current; isDefault = isDefault }
-        )
+        setHandler Actions.Install
     }
 
 let uninstallCommand = 
@@ -24,9 +22,7 @@ let uninstallCommand =
     command "uninstall" {
         description "Uninstalls the specified node version"
         inputs version
-        setHandler (fun (version) ->
-            Actions.Uninstall { version = version }
-        )
+        setHandler Actions.Uninstall
     }
 
 let useCommand =
@@ -37,9 +33,7 @@ let useCommand =
     command "use" {
         description "Sets the Node Version"
         inputs (version, lts, current)
-        setHandler (fun (version, lts, current) ->
-            Actions.Use { version = version; lts = lts; current = current }
-        )
+        setHandler Actions.Use
     }
 
 let listCommand = 
@@ -49,9 +43,7 @@ let listCommand =
     command "list" {
         description "Shows the available node versions"
         inputs (remote, updateIndex)
-        setHandler (fun (remote, updateIndex) ->
-            Actions.List { remote = remote; updateIndex = updateIndex }
-        )
+        setHandler Actions.List
     }
 
 [<EntryPoint>]

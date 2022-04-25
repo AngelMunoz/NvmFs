@@ -1,53 +1,10 @@
 namespace NvmFs.Cmd
 
-open CommandLine
 open System
 open System.Threading.Tasks
 open Spectre.Console
 open FsToolkit.ErrorHandling
 open NvmFs
-
-
-[<Verb("install", HelpText = "Installs the specified node version or the latest LTS by default")>]
-type Install =
-    { [<Option('n', "node", Group = "version", HelpText = "Installs the specified node version")>]
-      version: string option
-      [<Option('l', "lts", Group = "version", HelpText = "Ignores version and pulls down the latest LTS version")>]
-      lts: bool option
-      [<Option('c', "current", Group = "version", HelpText = "Ignores version and pulls down the latest Current version")>]
-      current: bool option
-      [<Option('d', "default", Required = false, HelpText = "Sets the downloaded version as default (default: false)")>]
-      isDefault: bool }
-
-[<Verb("uninstall", HelpText = "Uninstalls the specified node version")>]
-type Uninstall =
-    { [<Option('n', "node", Required = true, HelpText = "Removes the specified node version")>]
-      version: string option }
-
-[<Verb("use", HelpText = "Sets the Node Version")>]
-type Use =
-    { [<Option('n', "node", Group = "version", HelpText = "sets the specified node version in the PATH")>]
-      version: string option
-      [<Option('l',
-               "lts",
-               Group = "version",
-               HelpText = "Ignores version and sets the latest downloaded LTS version in the PATH")>]
-      lts: bool option
-      [<Option('c',
-               "current",
-               Group = "version",
-               HelpText = "Ignores version and sets the latest downloaded Current version in the PATH")>]
-      current: bool option }
-
-[<Verb("list", HelpText = "Shows the available node versions")>]
-type List =
-    { [<Option('r', "remote", Required = false, HelpText = "Displays the last downloaded version index in the console")>]
-      remote: bool option
-      [<Option('u',
-               "update",
-               Required = false,
-               HelpText = "Use together with --remote, pulls the version index from the node website")>]
-      updateIndex: bool option }
 
 [<RequireQualifiedAccess>]
 module Actions =
@@ -177,13 +134,13 @@ module Actions =
             return (checksums, node)
         }
 
-    let Install (options: Install) =
+    let Install (version: string option, lts: bool option, current: bool option, isDefault: bool) =
         task {
             do! runPreInstallChecks ()
 
             let! versions = IO.getIndex ()
 
-            match getInstallType options.lts options.current options.version, options.isDefault with
+            match getInstallType lts current version, isDefault with
             | Ok install, setAsDefault ->
                 let version = Common.getVersionItem versions install
 
@@ -243,13 +200,13 @@ module Actions =
                 |> TaskResult.mapError (fun err -> UseError.FailedToSetDefault err.Value)
         }
 
-    let Use (options: Use) =
+    let Use (version: string option, lts: bool option, current: bool option) =
         task {
             AnsiConsole.MarkupLine $"[bold yellow]Checking local versions[/]"
 
             let! versions = IO.getIndex ()
 
-            match getInstallType options.lts options.current options.version with
+            match getInstallType lts current version with
             | Ok install ->
                 let version = Common.getVersionItem versions install
 
@@ -313,11 +270,11 @@ module Actions =
             | ex -> return! UninstallError.FailedToDelete ex |> Result.Error
         }
 
-    let Uninstall (options: Uninstall) =
+    let Uninstall (version: string option) =
         task {
             let! versions = IO.getIndex ()
 
-            match getInstallType None None options.version with
+            match getInstallType None None version with
             | Ok install ->
                 let version = Common.getVersionItem versions install
 
@@ -356,16 +313,10 @@ module Actions =
                 return 1
         }
 
-    let List (options: List) =
+    let List (remote: bool option, updateIndex: bool option) =
         task {
-            let checkRemote =
-                options.remote
-                |> Option.defaultValue false
-
-            let updateIndex =
-                checkRemote
-                && (options.updateIndex
-                    |> Option.defaultValue false)
+            let checkRemote = remote |> Option.defaultValue false
+            let updateIndex = checkRemote && (updateIndex |> Option.defaultValue false)
 
             let! currentVersion =
                 task {
