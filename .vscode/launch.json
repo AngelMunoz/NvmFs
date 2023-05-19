@@ -9,8 +9,11 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/bin/Debug/net5.0/NvmFs.dll",
-      "args": ["install", "--lts", "true"],
+      "program": "${workspaceFolder}/src/NvmFs/bin/Debug/net7.0/NvmFs.dll",
+      "args": [
+        "install",
+        "--lts"
+      ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
       "console": "internalConsole"
@@ -20,8 +23,11 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/bin/Debug/net5.0/NvmFs.dll",
-      "args": ["install", "--current", "true"],
+      "program": "${workspaceFolder}/src/NvmFs/bin/Debug/net7.0/NvmFs.dll",
+      "args": [
+        "install",
+        "--current"
+      ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
       "console": "internalConsole"
@@ -31,8 +37,11 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/bin/Debug/net5.0/NvmFs.dll",
-      "args": ["install", "--node", "10"],
+      "program": "${workspaceFolder}/src/NvmFs/bin/Debug/net7.0/NvmFs.dll",
+      "args": [
+        "install",
+        "10"
+      ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
       "console": "internalConsole"
@@ -42,8 +51,11 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/bin/Debug/net5.0/NvmFs.dll",
-      "args": ["install", "--node", "10.15"],
+      "program": "${workspaceFolder}/src/NvmFs/bin/Debug/net7.0/NvmFs.dll",
+      "args": [
+        "install",
+        "10.15"
+      ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
       "console": "internalConsole"
@@ -53,8 +65,11 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/bin/Debug/net5.0/NvmFs.dll",
-      "args": ["install", "--node", "10.14.2"],
+      "program": "${workspaceFolder}/src/NvmFs/bin/Debug/net7.0/NvmFs.dll",
+      "args": [
+        "install",
+        "10.14.2"
+      ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
       "console": "internalConsole"
@@ -64,8 +79,10 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/bin/Debug/net5.0/NvmFs.dll",
-      "args": ["list"],
+      "program": "${workspaceFolder}/src/NvmFs/bin/Debug/net7.0/NvmFs.dll",
+      "args": [
+        "list"
+      ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
       "console": "internalConsole"
@@ -75,8 +92,11 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/bin/Debug/net5.0/NvmFs.dll",
-      "args": ["uninstall", "-n", "10.14.2"],
+      "program": "${workspaceFolder}/src/NvmFs/bin/Debug/net7.0/NvmFs.dll",
+      "args": [
+        "uninstall",
+        "10.14.2"
+      ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
       "console": "internalConsole"

@@ -47,6 +47,14 @@ type InstallType =
     | SpecificMM of string * string
     | SpecificMMP of string * string * string
 
+    member this.asString =
+        match this with
+        | LTS -> "lts"
+        | Current -> "current"
+        | SpecificM m -> m
+        | SpecificMM(major, minor) -> $"{major}.{minor}"
+        | SpecificMMP(major, minor, patch) -> $"{major}.{minor}.{patch}"
+
 type CurrentOS =
     | Linux
     | Mac
@@ -65,8 +73,7 @@ type SystemError =
     | FailedToGetArch
 
 type InstallError =
-    | ChecksumNotFound
-    | ChecksumMissmatch
+    | VersionNotFound of string
     | FailedToSetDefault of string
     | PlatformError
 
@@ -80,6 +87,7 @@ type SetDefaultError =
     | SymlinkError of string
     | PermissionError of string
     | UnsuppoertdOS
+
     member this.Value =
         match this with
         | SymlinkError err -> err
@@ -106,9 +114,15 @@ module Common =
         [<Literal>]
         let NvmSourceBaseUrl = "NVM_SOURCE_BASE_URL"
 
+    [<Literal>]
+    let StartMarker = "###   NVMFS  START   ###"
+
+    [<Literal>]
+    let EndMarker = "###   NVMFS  END    ###"
+
     let getVersionCodename (version: string) = $"{version.Split('.').[0]}.x"
 
-    let getLtsCodename (version: string) = $"{version.ToLowerInvariant()}"
+    let getLtsCodename (version: string) = version.ToLowerInvariant()
 
     let getCodename (version: NodeVerItem) =
         let defVersion = getVersionCodename version.version
@@ -159,15 +173,11 @@ module Common =
         | value -> Error $"{value} is not supported"
 
 
-    let getVersionItem (versions: NodeVerItem []) (install: InstallType) =
+    let getVersionItem (versions: NodeVerItem[]) (install: InstallType) =
         match install with
         | LTS ->
             versions
-            |> Array.choose (fun version ->
-                if version.lts.IsSome then
-                    Some version
-                else
-                    None)
+            |> Array.choose (fun version -> if version.lts.IsSome then Some version else None)
             |> Array.tryHead
         | Current -> versions |> Array.tryHead
         | SpecificM major ->
@@ -177,9 +187,8 @@ module Common =
                 else
                     $"v{major}"
 
-            versions
-            |> Array.tryFind (fun ver -> ver.version.StartsWith($"{major}."))
-        | SpecificMM (major, minor) ->
+            versions |> Array.tryFind (fun ver -> ver.version.StartsWith($"{major}."))
+        | SpecificMM(major, minor) ->
             let major =
                 if major.ToLowerInvariant().StartsWith('v') then
                     major
@@ -188,7 +197,7 @@ module Common =
 
             versions
             |> Array.tryFind (fun ver -> ver.version.StartsWith($"{major}.{minor}."))
-        | SpecificMMP (major, minor, patch) ->
+        | SpecificMMP(major, minor, patch) ->
             let major =
                 if major.ToLowerInvariant().StartsWith('v') then
                     major
