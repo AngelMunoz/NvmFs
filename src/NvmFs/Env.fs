@@ -19,9 +19,7 @@ module Env =
             let path =
                 TextPath(path = value).SeparatorColor(Color.Yellow).RootColor(Color.Yellow)
 
-            AnsiConsole.Markup $"[bold yellow]%%{Common.EnvVars.NvmFsNode}%%[/] is already set to: "
-            AnsiConsole.Write path
-            AnsiConsole.MarkupLine " nothing to do here."
+            AnsiConsole.MarkupLineInterpolated $"[yellow]%%{Common.EnvVars.NvmFsNode}%%[/] is already set to: {path}"
             Ok()
         | None ->
             let nvmfshome = Path.GetFullPath home
@@ -75,6 +73,6 @@ module Env =
 
 
             let target = IO.SymLinkTarget
-            let source = IO.versionDirectory version
+            let source = IO.versionDirectory os version
             return! IO.createSymlink source target
         }

@@ -24,14 +24,17 @@ module IO =
 
     let createSymlink (actualPath: string) (symbolicLink: string) =
         try
-            File.CreateSymbolicLink(symbolicLink, actualPath) |> Ok
+            let dirInfo = DirectoryInfo(symbolicLink)
+            dirInfo.CreateAsSymbolicLink(actualPath)
+            Debug.WriteLine($"Created symlink {dirInfo.FullName} -> {dirInfo.LinkTarget}")
+            dirInfo |> Ok
         with ex ->
             // for more information please see https://github.com/dotnet/runtime/issues/24271
             Error $"Could not write symlink {symbolicLink} -> {actualPath}\n {ex.Message}"
 
     let removeSymlink (path: string) =
         try
-            File.Delete(path)
+            Directory.Delete(path)
             Ok()
         with
         | :? DirectoryNotFoundException as ex ->
@@ -101,8 +104,8 @@ module IO =
 
     let SymLinkTarget = Path.Combine(Common.getHome (), "current")
 
-    let versionDirectory (version: string) =
-        Path.Combine(Common.getHome (), version, "bin")
+    let versionDirectory (os: CurrentOS) (version: string) =
+        Path.Combine(Common.getHome (), version, if os = Windows then String.Empty else "bin")
 
 
     let getIndex () =
@@ -142,7 +145,6 @@ module IO =
             Ok()
         with :? IOException as ex ->
             Error $"Failed to append patht to [yellow]{path}[/]"
-
 
     let codenameExistsInDisk (codename: string) =
         let home = DirectoryInfo(Common.getHome ())
