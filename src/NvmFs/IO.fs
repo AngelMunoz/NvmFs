@@ -1,12 +1,8 @@
 namespace NvmFs
 
 open System
-open ICSharpCode.SharpZipLib.Tar
 open System.IO
 open System.IO.Compression
-open System.Runtime.InteropServices
-open System.Security.Cryptography
-open System.Threading.Tasks
 
 
 open CliWrap
@@ -21,6 +17,7 @@ open NvmFs
 module IO =
     open System.Formats.Tar
     open System.Diagnostics
+    open FsToolkit.ErrorHandling
 
     let createSymlink (actualPath: string) (symbolicLink: string) =
         try
@@ -89,13 +86,21 @@ module IO =
                 | _ -> Cli.Wrap("node")
 
             let! result =
-                cmd
-                    .WithArguments("--version")
-                    .WithValidation(CommandResultValidation.ZeroExitCode)
-                    .ExecuteBufferedAsync()
-                    .Task
+                taskOption {
+                    try
+                        let! value =
+                            cmd
+                                .WithArguments("--version")
+                                .WithValidation(CommandResultValidation.ZeroExitCode)
+                                .ExecuteBufferedAsync()
+                                .Task
 
-            return result.StandardOutput
+                        return value.StandardOutput
+                    with _ ->
+                        return! None
+                }
+
+            return result |> Result.requireSome "Unable to get version"
         }
 
     let removeHomeDir () =
@@ -105,7 +110,7 @@ module IO =
     let SymLinkTarget = Path.Combine(Common.getHome (), "current")
 
     let versionDirectory (os: CurrentOS) (version: string) =
-        Path.Combine(Common.getHome (), version, if os = Windows then String.Empty else "bin")
+        Path.Combine(Common.getHome (), version, (if os = Windows then String.Empty else "bin"))
 
 
     let getIndex () =
@@ -171,6 +176,6 @@ module IO =
         let home = DirectoryInfo(Common.getHome ())
 
         home.GetDirectories()
-        |> Array.filter (fun dir -> not (dir.FullName.Contains("bin")))
+        |> Array.filter (fun dir -> dir.Name.Contains("v"))
         |> Array.map (fun dir -> dir.Name)
         |> Array.sortDescending

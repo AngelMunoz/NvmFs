@@ -5,6 +5,7 @@ open System.Net.Http
 open Spectre.Console
 
 module Network =
+    open System.Diagnostics
 
     let http = lazy (new HttpClient())
 
@@ -38,6 +39,13 @@ module Network =
             let updatedPath = Path.Combine(homePath, version)
 
             do IO.extractFromStream (os, homePath, str)
+
+            try
+                Directory.Delete(updatedPath, true)
+            with
+            | :? DirectoryNotFoundException
+            | :? IOException as ex -> Debug.WriteLine("Directory not found: {0}", ex.Message)
+
             do Directory.Move(extractedPath, updatedPath)
             return updatedPath
         }

@@ -277,11 +277,11 @@ module Actions =
             let updateIndex = checkRemote && (updateIndex |> Option.defaultValue false)
 
             let! currentVersion =
-                task {
-                    match Common.getOSPlatform () with
-                    | Ok os -> return! IO.getCurrentNodeVersion os
-                    | Error err -> return ""
+                taskResult {
+                    let! os = Common.getOSPlatform ()
+                    return! IO.getCurrentNodeVersion os
                 }
+                |> TaskResult.defaultValue ""
 
             let getVersionsTable (localVersions: string[]) (remoteVersions: string[] option) =
                 let remoteVersions = defaultArg remoteVersions [||]
@@ -294,7 +294,9 @@ module Actions =
                                    TableColumn("Remote") |]
                         )
 
-                table.Title <- TableTitle("Node Versions\n[green]* currently set as default[/]")
+                table.Title <- TableTitle("Node Versions:")
+
+                table.Width <- 75
 
                 let longestLength =
                     if localVersions.Length > remoteVersions.Length then
@@ -303,10 +305,10 @@ module Actions =
                         remoteVersions.Length
 
                 let markCurrent (version: string) =
-                    if version.Contains(currentVersion) then
-                        $"[green]{version}*[/]"
+                    if not (String.IsNullOrEmpty currentVersion) && version.Contains(currentVersion) then
+                        $"[green]*[/] {version}"
                     else
-                        version
+                        $"{version}"
 
                 for i in 0 .. longestLength - 1 do
                     let localVersion = localVersions |> Array.tryItem i |> Option.defaultValue ""
@@ -318,6 +320,7 @@ module Actions =
                     )
                     |> ignore
 
+                table.Caption <- TableTitle($"Active version is marked with '[green]*[/]'")
                 table
 
             let! local, remote =

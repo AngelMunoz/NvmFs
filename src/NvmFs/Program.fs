@@ -1,10 +1,9 @@
 module NvmFs.Main
 
 open FSharp.SystemCommandLine
-open System.Threading.Tasks
-open NvmFs.Cmd
 open System.CommandLine.Invocation
 open System.CommandLine.Help
+open NvmFs.Cmd
 
 let installCommand =
     command "install" {

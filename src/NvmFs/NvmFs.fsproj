@@ -3,22 +3,16 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
-    <Summary>
-      A Super Simple Node Version Manager Written in F#
-    </Summary>
-    <Description>
-      Another Node Version Manager, but this time written in F# that covers the most simple of use cases
-    </Description>
-    <Version>0.7.0</Version>
-    <Title>NvmFS</Title>
-    <Authors>Angel D. Munoz</Authors>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <ProjectUrl>https://github.com/AngelMunoz/NvmFs</ProjectUrl>
-    <RepositoryUrl>https://github.com/AngelMunoz/NvmFs.git</RepositoryUrl>
     <PackAsTool>true</PackAsTool>
-    <PublishReadyToRun>true</PublishReadyToRun>
-    <PublishSingleFile>true</PublishSingleFile>
     <ToolCommandName>nvmfs</ToolCommandName>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>	
+    <InvariantGlobalization>true</InvariantGlobalization>	
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
@@ -35,7 +29,6 @@
     <PackageReference Include="FSharp.SystemCommandLine" Version="0.17.0-beta4" />
     <PackageReference Include="FsToolkit.ErrorHandling" Version="4.6.0" />
     <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" Version="4.6.0" />
-    <PackageReference Include="SharpZipLib" Version="1.4.2" />
     <PackageReference Include="Spectre.Console" Version="0.46.0" />
     <PackageReference Include="Thoth.Json.Net" Version="11.0.0" />
   </ItemGroup>
