@@ -40,9 +40,17 @@ module IO =
         | :? UnauthorizedAccessException
         | :? IOException as ex -> Error $"Failed to delete symlink: {path} - [red]{ex.Message}[/]"
 
-    let trySetPermissionsUnix (dir: FileSystemInfo) =
+    let trySetPermissionsUnix (dir: DirectoryInfo) =
         try
-            dir.UnixFileMode <- UnixFileMode.UserExecute
+            dir.UnixFileMode <-
+                UnixFileMode.UserExecute
+                ||| UnixFileMode.UserRead
+                ||| UnixFileMode.UserWrite
+                ||| UnixFileMode.GroupRead
+                ||| UnixFileMode.GroupExecute
+                ||| UnixFileMode.OtherRead
+                ||| UnixFileMode.OtherExecute
+
             Ok()
         with
         | :? UnauthorizedAccessException as ex -> Error(PermissionError ex.Message)
