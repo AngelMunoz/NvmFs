@@ -11,6 +11,8 @@ open Spectre.Console
 open FsToolkit.ErrorHandling
 
 module Network =
+    [<Literal>]
+    let UserAgent = "NvmFs/0.9"
 
     let http = lazy (new HttpClient(Timeout = TimeSpan.FromSeconds(5.0)))
 
@@ -19,7 +21,7 @@ module Network =
             let work =
                 Cli
                     .Wrap("pwsh")
-                    .WithArguments([| "iwr"; "-Uri"; url; "-UserAgent"; "NvmFs/0.8"; "-OutFile"; fileDestination |])
+                    .WithArguments([| "iwr"; "-Uri"; url; "-UserAgent"; UserAgent; "-OutFile"; fileDestination |])
                     .WithValidation(CommandResultValidation.ZeroExitCode)
 
             try
@@ -34,7 +36,7 @@ module Network =
             let work =
                 Cli
                     .Wrap("curl")
-                    .WithArguments([| url; "--compressed"; "--fail"; "-A"; "NvmFs/0.8"; "-o"; fileDestination |])
+                    .WithArguments([| url; "--compressed"; "--fail"; "-A"; UserAgent; "-o"; fileDestination |])
                     .WithValidation(CommandResultValidation.ZeroExitCode)
 
             try
@@ -49,7 +51,7 @@ module Network =
             let work =
                 Cli
                     .Wrap("wget")
-                    .WithArguments([| "--compression=auto"; "-U"; "NvmFs/0.8"; "-O"; fileDestination; url |])
+                    .WithArguments([| "--compression=auto"; "-U"; UserAgent; "-O"; fileDestination; url |])
                     .WithValidation(CommandResultValidation.ZeroExitCode)
 
             try
