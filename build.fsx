@@ -84,7 +84,7 @@ module Operations =
 
     let buildBinaries (project: string) (runtime: string) =
         let cmd =
-            let framework = "net7.0"
+            let framework = "net8.0"
             let outdir = $"{outDir}/{runtime}"
 
             let flags =
