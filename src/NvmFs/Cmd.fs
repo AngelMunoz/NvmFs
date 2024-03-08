@@ -78,9 +78,11 @@ module Actions =
 
         task {
             let! file = Network.downloadNodeVersions (homedir.FullName)
-            AnsiConsole.MarkupLine($"[green]Updated node versions on {file}[/]")
+
+            match file with
+            | Ok _ -> AnsiConsole.MarkupLine("[green]Updated node versions[/]")
+            | Error e -> AnsiConsole.MarkupLine($"[red]Failed to update node versions[/]: {e.Message.EscapeMarkup()}")
         }
-        :> Task
 
     let private downloadNode (version: NodeVerItem) (setDefault: bool) =
         taskResult {
@@ -93,6 +95,7 @@ module Actions =
                         $"Downloading Node [yellow]{version.version}[/]",
                         fun _ -> Network.downloadNode version.version os arch
                     )
+                |> TaskResult.mapError (fun error -> FailedToSetDefault error.Message)
 
             if setDefault then
                 do!

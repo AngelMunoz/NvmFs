@@ -61,6 +61,7 @@ module IO =
         try
             DirectoryInfo(output).Create()
 
+
             match os with
             | Windows ->
                 use zip = new ZipArchive(source)
