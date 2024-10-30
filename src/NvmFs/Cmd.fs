@@ -8,345 +8,396 @@ open NvmFs
 
 [<RequireQualifiedAccess>]
 module Actions =
-    open System.IO
+  open System.IO
 
-    let private validateVersion (num: string) =
-        if num.IndexOf('v') = 0 then
-            let (parsed, _) = num.Substring 1 |> System.Int32.TryParse
-            parsed
+  let private validateVersion(num: string) =
+    if num.IndexOf('v') = 0 then
+      let (parsed, _) = num.Substring 1 |> System.Int32.TryParse
+      parsed
+    else
+      let (parsed, _) = System.Int32.TryParse(num)
+      parsed
+
+  let private validateVersionGroup
+    (version: string option, lts: bool option, current: bool option)
+    =
+    if
+      [ version.IsSome; lts.IsSome; current.IsSome ]
+      |> List.filter id
+      |> List.length > 1
+    then
+      failwith "Can only have one of 'version', '--lts' or '--current'."
+
+  let private getInstallType
+    (isLts: bool option)
+    (isCurrent: bool option)
+    (version: string option)
+    : Result<InstallType, string> =
+
+    match isLts, isCurrent, version with
+    | Some lts, None, None ->
+      if lts then
+        Ok LTS
+      else
+        Error "No valid version was presented"
+    | None, Some current, None ->
+      if current then
+        Ok Current
+      else
+        Error "No valid version was presented"
+    | None, None, Some version ->
+      match version.Split(".") with
+      | [| major |] ->
+        if validateVersion major then
+          Ok(SpecificM major)
         else
-            let (parsed, _) = System.Int32.TryParse(num)
-            parsed
+          Error $"{version} is not a valid node version"
+      | [| major; minor |] ->
+        if validateVersion major && validateVersion minor then
+          Ok(SpecificMM(major, minor))
+        else
+          Error $"{version} is not a valid node version"
+      | [| major; minor; patch |] ->
+        if
+          validateVersion major
+          && validateVersion minor
+          && validateVersion patch
+        then
+          Ok(SpecificMMP(major, minor, patch))
+        else
+          Error $"{version} is not a valid node version"
+      | _ -> Error $"{version} is not a valid node version"
+    | _ ->
+      Error
+        $"Use only one of --lts 'boolean', --current 'boolean', or --version 'string'"
 
-    let private validateVersionGroup (version: string option, lts: bool option, current: bool option) =
-        if [ version.IsSome; lts.IsSome; current.IsSome ] |> List.filter id |> List.length > 1 then
-            failwith "Can only have one of 'version', '--lts' or '--current'."
+  let private setVersionAsDefault (version: string) (os: CurrentOS) = result {
+    let! symlink = Env.setEnvVersion os version |> Result.mapError SymlinkError
 
-    let private getInstallType
-        (isLts: bool option)
-        (isCurrent: bool option)
-        (version: string option)
-        : Result<InstallType, string> =
+    match os with
+    | Windows -> ()
+    | Mac
+    | Linux ->
+      AnsiConsole.MarkupLine("[yellow]Setting permissions for node[/]")
+      do! IO.trySetPermissionsUnix symlink
+    | FreeBSD -> return! Error UnsuppoertdOS
+  }
 
-        match isLts, isCurrent, version with
-        | Some lts, None, None ->
-            if lts then
-                Ok LTS
-            else
-                Error "No valid version was presented"
-        | None, Some current, None ->
-            if current then
-                Ok Current
-            else
-                Error "No valid version was presented"
-        | None, None, Some version ->
-            match version.Split(".") with
-            | [| major |] ->
-                if validateVersion major then
-                    Ok(SpecificM major)
-                else
-                    Error $"{version} is not a valid node version"
-            | [| major; minor |] ->
-                if validateVersion major && validateVersion minor then
-                    Ok(SpecificMM(major, minor))
-                else
-                    Error $"{version} is not a valid node version"
-            | [| major; minor; patch |] ->
-                if validateVersion major && validateVersion minor && validateVersion patch then
-                    Ok(SpecificMMP(major, minor, patch))
-                else
-                    Error $"{version} is not a valid node version"
-            | _ -> Error $"{version} is not a valid node version"
-        | _ -> Error $"Use only one of --lts 'boolean', --current 'boolean', or --version 'string'"
+  let private runPreInstallChecks() =
+    let homedir = IO.createHomeDir()
+    AnsiConsole.MarkupLine("[yellow]Updating node versions[/]")
 
-    let private setVersionAsDefault (version: string) (os: CurrentOS) =
-        result {
-            let! symlink = Env.setEnvVersion os version |> Result.mapError SymlinkError
+    task {
+      let! file = Network.downloadNodeVersions(homedir.FullName)
 
-            match os with
-            | Windows -> ()
-            | Mac
-            | Linux ->
-                AnsiConsole.MarkupLine("[yellow]Setting permissions for node[/]")
-                do! IO.trySetPermissionsUnix symlink
-            | FreeBSD -> return! Error UnsuppoertdOS
-        }
+      match file with
+      | Ok _ -> AnsiConsole.MarkupLine("[green]Updated node versions[/]")
+      | Error e ->
+        AnsiConsole.MarkupLine(
+          $"[red]Failed to update node versions[/]: {e.Message.EscapeMarkup()}"
+        )
+    }
 
-    let private runPreInstallChecks () =
-        let homedir = IO.createHomeDir ()
-        AnsiConsole.MarkupLine("[yellow]Updating node versions[/]")
+  let private downloadNode (version: NodeVerItem) (setDefault: bool) = taskResult {
+    let! _, os, arch =
+      Common.getOsArchCodename version |> Result.setError PlatformError
 
-        task {
-            let! file = Network.downloadNodeVersions (homedir.FullName)
+    let! node =
+      AnsiConsole
+        .Status()
+        .StartAsync(
+          $"Downloading Node [yellow]{version.version}[/]",
+          fun _ -> Network.downloadNode version.version os arch
+        )
+      |> TaskResult.mapError(fun error -> FailedToSetDefault error.Message)
 
-            match file with
-            | Ok _ -> AnsiConsole.MarkupLine("[green]Updated node versions[/]")
-            | Error e -> AnsiConsole.MarkupLine($"[red]Failed to update node versions[/]: {e.Message.EscapeMarkup()}")
-        }
+    if setDefault then
+      do!
+        setVersionAsDefault version.version os
+        |> Result.mapError(fun err -> FailedToSetDefault err.Value)
 
-    let private downloadNode (version: NodeVerItem) (setDefault: bool) =
-        taskResult {
-            let! _, os, arch = Common.getOsArchCodename version |> Result.setError PlatformError
+    return node
+  }
 
-            let! node =
-                AnsiConsole
-                    .Status()
-                    .StartAsync(
-                        $"Downloading Node [yellow]{version.version}[/]",
-                        fun _ -> Network.downloadNode version.version os arch
-                    )
-                |> TaskResult.mapError (fun error -> FailedToSetDefault error.Message)
+  let Install
+    (
+      version: string option,
+      lts: bool option,
+      current: bool option,
+      isDefault: bool
+    ) =
+    task {
+      validateVersionGroup(version, lts, current)
+      do! runPreInstallChecks()
 
-            if setDefault then
-                do!
-                    setVersionAsDefault version.version os
-                    |> Result.mapError (fun err -> FailedToSetDefault err.Value)
+      let versions = IO.getIndex()
 
-            return node
-        }
+      match getInstallType lts current version, isDefault with
+      | Ok install, setAsDefault ->
 
-    let Install (version: string option, lts: bool option, current: bool option, isDefault: bool) =
-        task {
-            validateVersionGroup (version, lts, current)
-            do! runPreInstallChecks ()
+        let! installResult =
+          taskResult {
+            let! version =
+              Common.getVersionItem versions install
+              |> Result.requireSome(VersionNotFound install.asString)
 
-            let versions = IO.getIndex ()
+            do! downloadNode version setAsDefault |> TaskResult.ignore
 
-            match getInstallType lts current version, isDefault with
-            | Ok install, setAsDefault ->
+            AnsiConsole.MarkupLine
+              $"[green]Node version {version.version} installed[/]"
 
-                let! installResult =
-                    taskResult {
-                        let! version =
-                            Common.getVersionItem versions install
-                            |> Result.requireSome (VersionNotFound install.asString)
+            if setAsDefault then
+              AnsiConsole.MarkupLine
+                $"[green]Set {version.version} as default[/]"
 
-                        do! downloadNode version setAsDefault |> TaskResult.ignore
+            return ()
+          }
+          |> TaskResult.mapError(fun error ->
+            match error with
+            | VersionNotFound version -> "[red]{version}[/] not found"
+            | FailedToSetDefault msg ->
+              $"[red]We could not set {install.asString} as default: {msg}[/]"
+            | PlatformError ->
+              $"[red]We were unable to get the current platform and architecture[/]")
 
-                        AnsiConsole.MarkupLine $"[green]Node version {version.version} installed[/]"
+        match installResult with
+        | Ok() ->
+          AnsiConsole.MarkupLine ""
+          return 0
+        | Error err ->
+          AnsiConsole.Markup err
+          return 1
+      | Error err, _ ->
+        AnsiConsole.MarkupLine $"[red]{err}[/]"
+        return 1
+    }
 
-                        if setAsDefault then
-                            AnsiConsole.MarkupLine $"[green]Set {version.version} as default[/]"
+  let findAndSetVersion version = result {
+    let! _, os, _ =
+      Common.getOsArchCodename version |> Result.setError UseError.PlatformError
 
-                        return ()
-                    }
-                    |> TaskResult.mapError (fun error ->
-                        match error with
-                        | VersionNotFound version -> "[red]{version}[/] not found"
-                        | FailedToSetDefault msg -> $"[red]We could not set {install.asString} as default: {msg}[/]"
-                        | PlatformError -> $"[red]We were unable to get the current platform and architecture[/]")
+    do!
+      IO.getLocalNodes()
+      |> Array.contains version.version
+      |> Result.requireTrue(UseError.NodeNotInDisk version.version)
 
-                match installResult with
-                | Ok() ->
-                    AnsiConsole.MarkupLine ""
-                    return 0
-                | Error err ->
-                    AnsiConsole.Markup err
-                    return 1
-            | Error err, _ ->
-                AnsiConsole.MarkupLine $"[red]{err}[/]"
-                return 1
-        }
+    AnsiConsole.MarkupLine
+      $"[yellow]Setting version[/] [green]%s{version.version}[/]"
 
-    let findAndSetVersion version =
-        result {
-            let! _, os, _ = Common.getOsArchCodename version |> Result.setError UseError.PlatformError
+    do!
+      setVersionAsDefault version.version os
+      |> Result.mapError(fun err -> UseError.FailedToSetDefault err.Value)
+  }
 
-            do!
-                IO.getLocalNodes ()
-                |> Array.contains version.version
-                |> Result.requireTrue (UseError.NodeNotInDisk version.version)
+  let Use(version: string option, lts: bool option, current: bool option) = task {
+    validateVersionGroup(version, lts, current)
+    AnsiConsole.MarkupLine $"[yellow]Checking local versions[/]"
 
-            AnsiConsole.MarkupLine $"[yellow]Setting version[/] [green]%s{version.version}[/]"
+    let versions = IO.getIndex()
 
-            do!
-                setVersionAsDefault version.version os
-                |> Result.mapError (fun err -> UseError.FailedToSetDefault err.Value)
-        }
+    match getInstallType lts current version with
+    | Ok install ->
+      let version = Common.getVersionItem versions install
 
-    let Use (version: string option, lts: bool option, current: bool option) =
-        task {
-            validateVersionGroup (version, lts, current)
-            AnsiConsole.MarkupLine $"[yellow]Checking local versions[/]"
+      match version with
+      | Some version ->
 
-            let versions = IO.getIndex ()
+        let findAndSetResult = findAndSetVersion version
 
-            match getInstallType lts current version with
-            | Ok install ->
-                let version = Common.getVersionItem versions install
+        match findAndSetResult with
+        | Error UseError.PlatformError ->
+          AnsiConsole.MarkupLine
+            $"[red]We were unable to get the current platform and architecture[/]"
 
-                match version with
-                | Some version ->
+          return 1
+        | Error(UseError.FailedToSetDefault msg) ->
+          AnsiConsole.MarkupInterpolated
+            $"[yellow]We could not set {version.version} as default: ${msg}[/]"
 
-                    let findAndSetResult = findAndSetVersion version
+          return 1
+        | Error(UseError.NodeNotInDisk codename) ->
+          let l2 = $"[yellow]%s{version.version}[/]"
 
-                    match findAndSetResult with
-                    | Error UseError.PlatformError ->
-                        AnsiConsole.MarkupLine $"[red]We were unable to get the current platform and architecture[/]"
+          AnsiConsole.MarkupLine
+            $"We weren't able to find {l2} locally, please use 'install' and optionally '--default' to enable it."
 
-                        return 1
-                    | Error(UseError.FailedToSetDefault msg) ->
-                        AnsiConsole.MarkupInterpolated
-                            $"[yellow]We could not set {version.version} as default: ${msg}[/]"
+          return 1
+        | Ok _ ->
+          AnsiConsole.MarkupLine
+            $"[green]Node version {version.version} set as the default[/]"
 
-                        return 1
-                    | Error(UseError.NodeNotInDisk codename) ->
-                        let l2 = $"[yellow]%s{version.version}[/]"
+          return 0
+      | None ->
+        AnsiConsole.MarkupLine "[red]Version Not found[/]"
+        return 1
+    | Error err ->
+      AnsiConsole.MarkupLine $"[red]{err}[/]"
+      return 1
+  }
 
-                        AnsiConsole.MarkupLine
-                            $"We weren't able to find {l2} locally, please use 'install' and optionally '--default' to enable it."
+  let doUninstall version = result {
+    let! codename, os, arch =
+      Common.getOsArchCodename version
+      |> Result.setError UninstallError.PlatformError
 
-                        return 1
-                    | Ok _ ->
-                        AnsiConsole.MarkupLine $"[green]Node version {version.version} set as the default[/]"
-                        return 0
-                | None ->
-                    AnsiConsole.MarkupLine "[red]Version Not found[/]"
-                    return 1
-            | Error err ->
-                AnsiConsole.MarkupLine $"[red]{err}[/]"
-                return 1
-        }
+    do!
+      IO.codenameExistsInDisk codename
+      |> Result.requireTrue UninstallError.NodeNotInDisk
 
-    let doUninstall version =
-        result {
-            let! codename, os, arch = Common.getOsArchCodename version |> Result.setError UninstallError.PlatformError
+    AnsiConsole.MarkupLine
+      $"[yellow]Uninstalling version[/]: %s{version.version}"
 
-            do!
-                IO.codenameExistsInDisk codename
-                |> Result.requireTrue UninstallError.NodeNotInDisk
+    let path =
+      Path.Combine(
+        Common.getHome(),
+        $"latest-{codename}",
+        Common.getVersionDirName version.version os arch
+      )
 
-            AnsiConsole.MarkupLine $"[yellow]Uninstalling version[/]: %s{version.version}"
+    AnsiConsole.MarkupLine
+      $"[yellow]Uninstalling version[/]: %s{version.version}"
 
-            let path =
-                Path.Combine(Common.getHome (), $"latest-{codename}", Common.getVersionDirName version.version os arch)
+    try
+      let target = Directory.ResolveLinkTarget(path, true)
+      Directory.Delete(target.LinkTarget)
+      Directory.Delete(path, true)
+      return ()
+    with ex ->
+      return! UninstallError.FailedToDelete ex |> Result.Error
+  }
 
-            AnsiConsole.MarkupLine $"[yellow]Uninstalling version[/]: %s{version.version}"
+  let Uninstall(version: string option) = task {
+    let versions = IO.getIndex()
 
-            try
-                let target = Directory.ResolveLinkTarget(path, true)
-                Directory.Delete(target.LinkTarget)
-                Directory.Delete(path, true)
-                return ()
-            with ex ->
-                return! UninstallError.FailedToDelete ex |> Result.Error
-        }
+    match getInstallType None None version with
+    | Ok install ->
+      let version = Common.getVersionItem versions install
 
-    let Uninstall (version: string option) =
-        task {
-            let versions = IO.getIndex ()
+      match version with
+      | Some version ->
+        match doUninstall version with
+        | Ok _ ->
+          AnsiConsole.MarkupLine
+            $"[green]Uninstalled Version[/] [yellow]%s{version.version}[/][green] successfully[/]"
 
-            match getInstallType None None version with
-            | Ok install ->
-                let version = Common.getVersionItem versions install
+          return 0
+        | Error UninstallError.PlatformError ->
+          AnsiConsole.MarkupLine
+            $"[red]We were unable to get the current platform and architecture[/]"
 
-                match version with
-                | Some version ->
-                    match doUninstall version with
-                    | Ok _ ->
-                        AnsiConsole.MarkupLine
-                            $"[green]Uninstalled Version[/] [yellow]%s{version.version}[/][green] successfully[/]"
+          return 1
+        | Error UninstallError.NodeNotInDisk ->
+          let l1 = $"[red]Version[/] [yellow]%s{version.version}[/]"
 
-                        return 0
-                    | Error UninstallError.PlatformError ->
-                        AnsiConsole.MarkupLine $"[red]We were unable to get the current platform and architecture[/]"
+          let l2 = $"[red]is not present in the system, aborting.[/]"
 
-                        return 1
-                    | Error UninstallError.NodeNotInDisk ->
-                        let l1 = $"[red]Version[/] [yellow]%s{version.version}[/]"
+          AnsiConsole.MarkupLine $"{l1} {l2}"
+          return 1
 
-                        let l2 = $"[red]is not present in the system, aborting.[/]"
-
-                        AnsiConsole.MarkupLine $"{l1} {l2}"
-                        return 1
-
-                    | Error(UninstallError.FailedToDelete ex) ->
-                        AnsiConsole.MarkupLine $"[red]Failed to delete {version.version}[/]"
+        | Error(UninstallError.FailedToDelete ex) ->
+          AnsiConsole.MarkupLine $"[red]Failed to delete {version.version}[/]"
 #if DEBUG
-                        AnsiConsole.WriteException(ex, ExceptionFormats.ShortenPaths)
+          AnsiConsole.WriteException(ex, ExceptionFormats.ShortenPaths)
 #endif
-                        return 1
-                | None ->
-                    AnsiConsole.MarkupLine "[red]Version Not found[/]"
-                    return 1
-            | Result.Error err ->
-                AnsiConsole.MarkupLine $"[red]{err}[/]"
-                return 1
-        }
+          return 1
+      | None ->
+        AnsiConsole.MarkupLine "[red]Version Not found[/]"
+        return 1
+    | Result.Error err ->
+      AnsiConsole.MarkupLine $"[red]{err}[/]"
+      return 1
+  }
 
-    let List (remote: bool option, updateIndex: bool option) =
-        task {
-            let checkRemote = remote |> Option.defaultValue false
-            let updateIndex = checkRemote && (updateIndex |> Option.defaultValue false)
+  let List(remote: bool option, updateIndex: bool option) = task {
+    let checkRemote = remote |> Option.defaultValue false
+    let updateIndex = checkRemote && (updateIndex |> Option.defaultValue false)
 
-            let! currentVersion =
-                taskResult {
-                    let! os = Common.getOSPlatform ()
-                    return! IO.getCurrentNodeVersion os
-                }
-                |> TaskResult.defaultValue ""
+    let! currentVersion =
+      taskResult {
+        let! os = Common.getOSPlatform()
+        return! IO.getCurrentNodeVersion os
+      }
+      |> TaskResult.defaultValue ""
 
-            let getVersionsTable (localVersions: string[]) (remoteVersions: string[] option) =
-                let remoteVersions = defaultArg remoteVersions [||]
+    let getVersionsTable
+      (localVersions: string[])
+      (remoteVersions: string[] option)
+      =
+      let remoteVersions = defaultArg remoteVersions [||]
 
-                let table =
-                    Table()
-                        .AddColumns(
-                            [| TableColumn("Local")
-                               if remoteVersions.Length > 0 then
-                                   TableColumn("Remote") |]
-                        )
+      let table =
+        Table()
+          .AddColumns(
+            [|
+              TableColumn("Local")
+              if remoteVersions.Length > 0 then
+                TableColumn("Remote")
+            |]
+          )
 
-                table.Title <- TableTitle("Node Versions:")
+      table.Title <- TableTitle("Node Versions:")
 
-                table.Width <- 75
+      table.Width <- 75
 
-                let longestLength =
-                    if localVersions.Length > remoteVersions.Length then
-                        localVersions.Length
-                    else
-                        remoteVersions.Length
+      let longestLength =
+        if localVersions.Length > remoteVersions.Length then
+          localVersions.Length
+        else
+          remoteVersions.Length
 
-                let markCurrent (version: string) =
-                    if not (String.IsNullOrEmpty currentVersion) && version.Contains(currentVersion) then
-                        $"[green]*[/] {version}"
-                    else
-                        $"{version}"
+      let markCurrent(version: string) =
+        if
+          not(String.IsNullOrEmpty currentVersion)
+          && version.Contains(currentVersion)
+        then
+          $"[green]*[/] {version}"
+        else
+          $"{version}"
 
-                for i in 0 .. longestLength - 1 do
-                    let localVersion = localVersions |> Array.tryItem i |> Option.defaultValue ""
+      for i in 0 .. longestLength - 1 do
+        let localVersion =
+          localVersions |> Array.tryItem i |> Option.defaultValue ""
 
-                    table.AddRow(
-                        [| markCurrent localVersion
-                           if remoteVersions.Length > 0 then
-                               markCurrent (remoteVersions |> Array.tryItem i |> Option.defaultValue "") |]
-                    )
-                    |> ignore
+        table.AddRow(
+          [|
+            markCurrent localVersion
+            if remoteVersions.Length > 0 then
+              markCurrent(
+                remoteVersions |> Array.tryItem i |> Option.defaultValue ""
+              )
+          |]
+        )
+        |> ignore
 
-                table.Caption <- TableTitle($"Active version is marked with '[green]*[/]'")
-                table
+      table.Caption <-
+        TableTitle($"Active version is marked with '[green]*[/]'")
 
-            let! local, remote =
-                task {
-                    match checkRemote, updateIndex with
-                    | true, true ->
-                        do! runPreInstallChecks ()
-                        let nodes = IO.getIndex ()
-                        return IO.getLocalNodes (), Some(nodes |> Array.map (fun ver -> ver.version))
-                    | true, false ->
-                        AnsiConsole.MarkupLine "[yellow]Checking local versions[/]"
+      table
 
-                        let nodes = IO.getIndex ()
-                        return IO.getLocalNodes (), Some(nodes |> Array.map (fun ver -> ver.version))
-                    | false, true ->
-                        AnsiConsole.MarkupLine
-                            "[yellow]Warning[/]: --update can only be used when [yellow]--remote true[/] is set, ignoring."
+    let! local, remote = task {
+      match checkRemote, updateIndex with
+      | true, true ->
+        do! runPreInstallChecks()
+        let nodes = IO.getIndex()
 
-                        return IO.getLocalNodes (), None
-                    | _ -> return IO.getLocalNodes (), None
-                }
+        return
+          IO.getLocalNodes(), Some(nodes |> Array.map(fun ver -> ver.version))
+      | true, false ->
+        AnsiConsole.MarkupLine "[yellow]Checking local versions[/]"
 
-            let table = getVersionsTable local remote
-            AnsiConsole.Write table
-            return 0
-        }
+        let nodes = IO.getIndex()
+
+        return
+          IO.getLocalNodes(), Some(nodes |> Array.map(fun ver -> ver.version))
+      | false, true ->
+        AnsiConsole.MarkupLine
+          "[yellow]Warning[/]: --update can only be used when [yellow]--remote true[/] is set, ignoring."
+
+        return IO.getLocalNodes(), None
+      | _ -> return IO.getLocalNodes(), None
+    }
+
+    let table = getVersionsTable local remote
+    AnsiConsole.Write table
+    return 0
+  }
