@@ -67,82 +67,87 @@ You can customize paths using the following environment variables
 ### nvmfs help
 
 ```
-NvmFs 0.6.0
-Copyright (C) 2020 Angel D. Munoz
+Description:
+  nvmfs is a simple node version manager that just downloads and sets node versions. That's it!
 
-  install      Installs the specified node version or the latest LTS by default
+Usage:
+  NvmFs [command] [options]
 
-  use          Sets the Node Version
+Options:
+  --version       Show version information
+  -?, -h, --help  Show help and usage information
 
-  list         Shows the available node versions
-
-  uninstall    Uninstalls the specified node version
-
-  help         Display more information on a specific command.
-
-  version      Display version information.
+Commands:
+  install <version>    Installs the specified node version or the latest LTS by default []
+  uninstall <version>  Uninstalls the specified node version []
+  use <version>        Sets the Node Version []
+  list                 Shows the available node versions
 ```
 
 ### nvmfs install --help
 
 ```
-NvmFs 0.6.0
-Copyright (C) 2020 Angel D. Munoz
+Description:
+  Installs the specified node version or the latest LTS by default
 
-  -n, --node       (Group: version) Installs the specified node version
+Usage:
+  NvmFs install [<version>] [options]
 
-  -l, --lts        (Group: version) Ignores version and pulls down the latest LTS version
+Arguments:
+  <version>  Installs the specified node version []
 
-  -c, --current    (Group: version) Ignores version and pulls down the latest Current version
-
-  -d, --default    Sets the downloaded version as default (default: false)
-
-  --help           Display this help screen.
-
-  --version        Display version information.
+Options:
+  -l, --lts <lts>          Ignores version and pulls down the latest LTS version []
+  -c, --current <current>  Ignores version and pulls down the latest Current version []
+  -d, --default            Sets the downloaded version as default [default: False]
+  -?, -h, --help           Show help and usage information
 ```
 
 ### nvmfs use --help
 
 ```
-NvmFs 0.6.0
-Copyright (C) 2020 Angel D. Munoz
+Description:
+  Sets the Node Version
 
-  -n, --node       (Group: version) sets the specified node version in the PATH
+Usage:
+  NvmFs use [<version>] [options]
 
-  -l, --lts        (Group: version) Ignores version and sets the latest downloaded LTS version in the PATH
+Arguments:
+  <version>  Installs the specified node version []
 
-  -c, --current    (Group: version) Ignores version and sets the latest downloaded Current version in the PATH
-
-  --help           Display this help screen.
-
-  --version        Display version information.
-```
-
-### nvmfs list --help
-
-```
-NvmFs 0.6.0
-Copyright (C) 2020 Angel D. Munoz
-
-  -r, --remote    Displays the last downloaded version index in the console
-
-  -u, --update    Use together with --remote, pulls the version index from the node website
-
-  --help          Display this help screen.
-
-  --version       Display version information.
+Options:
+  -l, --lts <lts>          Ignores version and pulls down the latest LTS version []
+  -c, --current <current>  Ignores version and pulls down the latest Current version []
+  -?, -h, --help           Show help and usage information
 ```
 
 ### nvmfs uninstall --help
 
 ```
-NvmFs 0.6.0
-Copyright (C) 2020 Angel D. Munoz
+Description:
+  Uninstalls the specified node version
 
-  -n, --node    Required. Removes the specified node version
+Usage:
+  NvmFs uninstall [<version>] [options]
 
-  --help        Display this help screen.
+Arguments:
+  <version>  Installs the specified node version []
 
-  --version     Display version information.
+Options:
+  -?, -h, --help  Show help and usage information
+```
+
+### nvmfs list --help
+
+```
+Description:
+  Shows the available node versions
+
+Usage:
+  NvmFs list [options]
+
+Options:
+  -r, --remote <remote>  Displays the last downloaded version index in the console []
+  -u, --update <update>  Use together with --remote, pulls the version index from the node website []
+  -?, -h, --help         Show help and usage information
 ```
