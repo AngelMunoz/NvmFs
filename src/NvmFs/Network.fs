@@ -12,7 +12,7 @@ open FsToolkit.ErrorHandling
 
 module Network =
   [<Literal>]
-  let UserAgent = "NvmFs/0.9"
+  let UserAgent = "NvmFs/1.0"
 
   let http = lazy (new HttpClient(Timeout = TimeSpan.FromSeconds(5.0)))
 

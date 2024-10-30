@@ -155,11 +155,11 @@ module IO =
       StringComparison.InvariantCultureIgnoreCase
     )
 
-  let tryUpdateBashrc(lines: string list) =
+  let tryUpdateBashrc(lines: string list, isMac) =
     let path =
       Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.Personal),
-        ".bashrc"
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        if isMac then ".zshrc" else ".bashrc"
       )
 
     try
