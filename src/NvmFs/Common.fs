@@ -141,7 +141,7 @@ module Common =
     |> Option.ofObj
     |> Option.defaultValue(
       System.IO.Path.GetFullPath
-        $"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/nvmfs"
+        $"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}/nvmfs"
     )
 
   let getSrcBaseUrl() =
