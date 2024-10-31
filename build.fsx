@@ -21,7 +21,7 @@ let libraries = []
 let NugetApiKey = EnvVar.getOrFail "NUGET_DEPLOY_KEY"
 
 [<Literal>]
-let PackageVersion = "1.0.0"
+let PackageVersion = "1.0.1"
 
 let fsSources =
   Glob.create "*.fsx"
@@ -95,10 +95,8 @@ module Operations =
           "-p:SelfContained=true"
           "-p:PublishTrimmed=true"
           "-p:InvariantGlobalization=true"
-          "-p:EnableCompressionInSingleFile=true"
           "-p:IncludeNativeLibrariesForSelfExtract=true"
-          "-p:DebugType=none"
-          "-p:DebugSymbols=false"
+          "-p:DebugType=embedded"
         ]
         |> String.concat " "
 
