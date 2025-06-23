@@ -21,7 +21,7 @@
     <PackageReference Include="FSharp.SystemCommandLine" Version="2.0.0-beta5.3" />
     <PackageReference Include="FsToolkit.ErrorHandling" Version="5.0.0" />
     <PackageReference Include="Spectre.Console" Version="0.50.0" />
-    <PackageReference Include="JDeck" Version="1.0.0-beta-0061" />
+    <PackageReference Include="JDeck" Version="1.0.0-beta-006" />
   </ItemGroup>
 
 </Project>
