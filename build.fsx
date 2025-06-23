@@ -21,7 +21,7 @@ let libraries = []
 let NugetApiKey = EnvVar.getOrFail "NUGET_DEPLOY_KEY"
 
 [<Literal>]
-let PackageVersion = "1.0.1"
+let PackageVersion = "1.2.0"
 
 let fsSources =
   Glob.create "*.fsx"
@@ -86,7 +86,7 @@ module Operations =
 
   let buildBinaries (project: string) (runtime: string) =
     let cmd =
-      let framework = "net8.0"
+      let framework = "net9.0"
       let outdir = $"{outDir}/{runtime}"
 
       let flags =
