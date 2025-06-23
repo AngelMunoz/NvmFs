@@ -7,14 +7,14 @@ open System.IO.Compression
 open CliWrap
 open CliWrap.Buffered
 
-open Thoth.Json.Net
-
 open NvmFs
 
 module IO =
   open System.Formats.Tar
   open System.Diagnostics
   open FsToolkit.ErrorHandling
+  open JDeck
+  open System.Text.Json
 
   let createSymlink (actualPath: string) (symbolicLink: string) =
     try
@@ -131,16 +131,17 @@ module IO =
 
     let content =
       try
-        File.ReadAllText(Path.Combine(path, "index.json"))
+        File.ReadAllBytes(Path.Combine(path, "index.json"))
       with _ ->
-        String.Empty
+        Array.empty<byte>
 
-    match Decode.fromString (Decode.array NodeVerItem.Decoder) content with
+
+    match Decoding.auto<NodeVerItem[]>(content, JsonSerializerOptions() |> Codec.useDecoder NodeVerItem.Decoder)  with
     | Ok res -> res
     | Error err -> [||]
 
   let removeExtension(file: string) =
-    let file = FileInfo(file)
+    let file = FileInfo file
     file.FullName.Replace(file.Extension, String.Empty)
 
   let isMarkerInBashrc path =
@@ -158,7 +159,7 @@ module IO =
   let tryUpdateBashrc(lines: string list, isMac) =
     let path =
       Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        Environment.GetFolderPath Environment.SpecialFolder.UserProfile,
         if isMac then ".zshrc" else ".bashrc"
       )
 

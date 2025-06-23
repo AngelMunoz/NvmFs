@@ -2,7 +2,10 @@ namespace NvmFs
 
 open System
 open System.Runtime.InteropServices
-open Thoth.Json.Net
+
+open FsToolkit.ErrorHandling
+
+open JDeck
 
 type NodeVerItem = {
   version: string
@@ -19,31 +22,45 @@ type NodeVerItem = {
 } with
 
   static member Decoder: Decoder<NodeVerItem> =
+    fun person ->
 
-    let customDecode
-      (value: string)
-      (jvalue: JsonValue)
-      : Result<string option, DecoderError> =
-      match Decode.bool value jvalue with
-      | Ok _ -> Ok None
-      | Error _ ->
-        match Decode.string value jvalue with
-        | Ok str -> Ok(Option.ofObj str)
-        | Error err -> Error err
+      result {
+        let! version =
+          person |> Required.Property.get("version", Required.string)
 
-    Decode.object(fun get -> {
-      version = get.Required.Field "version" Decode.string
-      date = get.Required.Field "date" Decode.string
-      files = get.Required.Field "files" (Decode.list Decode.string)
-      npm = get.Optional.Field "npm" Decode.string
-      v8 = get.Required.Field "v8" Decode.string
-      uv = get.Optional.Field "uv" Decode.string
-      zlib = get.Optional.Field "zlib" Decode.string
-      openssl = get.Optional.Field "openssl" Decode.string
-      modules = get.Optional.Field "modules" Decode.string
-      lts = get.Required.Field "lts" customDecode
-      security = get.Required.Field "security" Decode.bool
-    })
+        let! date = person |> Required.Property.get("date", Required.string)
+        let! files = person |> Required.Property.list("files", Required.string)
+        let! npm = person |> Optional.Property.get("npm", Required.string)
+
+        let! v8 = person |> Required.Property.get("v8", Required.string)
+        let! uv = person |> Optional.Property.get("uv", Required.string)
+        let! zlib = person |> Optional.Property.get("zlib", Required.string)
+
+        let! openssl =
+          person |> Optional.Property.get("openssl", Required.string)
+
+        let! modules =
+          person |> Optional.Property.get("modules", Required.string)
+
+        let! lts = person |> Required.Property.get("lts", Optional.string)
+
+        let! security =
+          person |> Required.Property.get("security", Required.boolean)
+
+        return {
+          version = version
+          date = date
+          files = files
+          npm = npm
+          v8 = v8
+          uv = uv
+          zlib = zlib
+          openssl = openssl
+          modules = modules
+          lts = lts
+          security = security
+        }
+      }
 
 type InstallType =
   | LTS

@@ -67,6 +67,7 @@ module Env =
 
   let setNvmFsNodeUnix isMac = result {
     let nodepath = IO.SymLinkTarget
+
     let lines = [
       Common.StartMarker
       "# Please do not remove the marker above to avoid re-appending these lines"
@@ -78,10 +79,10 @@ module Env =
     do! IO.tryUpdateBashrc(lines, isMac)
 
     Environment.SetEnvironmentVariable(
-        Common.EnvVars.NvmFsNode,
-        nodepath,
-        EnvironmentVariableTarget.User
-      )
+      Common.EnvVars.NvmFsNode,
+      nodepath,
+      EnvironmentVariableTarget.User
+    )
 
     Environment.SetEnvironmentVariable(
       Common.EnvVars.NvmFsHome,
@@ -89,8 +90,11 @@ module Env =
       EnvironmentVariableTarget.User
     )
 
-    AnsiConsole.MarkupLineInterpolated $"[yellow]We've set the env variables |${Common.EnvVars.NvmFsNode}|${Common.EnvVars.NvmFsHome}| to the current user[/]"
-    AnsiConsole.MarkupLine "[yellow]It is likely that you need to restart your terminal for it to take effect.[/]"
+    AnsiConsole.MarkupLineInterpolated
+      $"[yellow]We've set the env variables |${Common.EnvVars.NvmFsNode}|${Common.EnvVars.NvmFsHome}| to the current user[/]"
+
+    AnsiConsole.MarkupLine
+      "[yellow]It is likely that you need to restart your terminal for it to take effect.[/]"
   }
 
   let setEnvVersion (os: CurrentOS) (version: string) =
