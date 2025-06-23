@@ -18,7 +18,7 @@
 
   <ItemGroup>
     <PackageReference Include="CliWrap" Version="3.6.3" />
-    <PackageReference Include="FSharp.SystemCommandLine" Version="0.17.0-beta4" />
+    <PackageReference Include="FSharp.SystemCommandLine" Version="2.0.0-beta5.3" />
     <PackageReference Include="FsToolkit.ErrorHandling" Version="4.6.0" />
     <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" Version="4.6.0" />
     <PackageReference Include="Spectre.Console" Version="0.46.0" />
