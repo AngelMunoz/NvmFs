@@ -15,6 +15,7 @@ module IO =
   open FsToolkit.ErrorHandling
   open JDeck
   open System.Text.Json
+  open Spectre.Console
 
   let createSymlink (actualPath: string) (symbolicLink: string) =
     try
@@ -136,9 +137,18 @@ module IO =
         Array.empty<byte>
 
 
-    match Decoding.auto<NodeVerItem[]>(content, JsonSerializerOptions() |> Codec.useDecoder NodeVerItem.Decoder)  with
+    match
+      Decoding.auto<NodeVerItem[]>(
+        content,
+        JsonSerializerOptions() |> Codec.useDecoder NodeVerItem.Decoder
+      )
+    with
     | Ok res -> res
-    | Error err -> [||]
+    | Error err ->
+      AnsiConsole.MarkupLineInterpolated
+        $"[red]Failed to decode index.json:[/] [bold]{err.message}[/] - [bold yellow]Raw Value: {err.rawValue}[/]"
+
+      [||]
 
   let removeExtension(file: string) =
     let file = FileInfo file

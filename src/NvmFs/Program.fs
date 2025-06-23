@@ -9,10 +9,10 @@ let installCommand = command "install" {
 
   inputs(
     argumentMaybe "version" |> desc "Installs the specified node version",
-    optionMaybe "--lts"
+    option "--lts"
     |> alias "-l"
     |> desc "Ignores version and pulls down the latest LTS version",
-    optionMaybe "--current"
+    option "--current"
     |> alias "-c"
     |> desc "Ignores version and pulls down the latest Current version",
     option "--default"
@@ -39,10 +39,10 @@ let useCommand = command "use" {
 
   inputs(
     argumentMaybe "version" |> desc "Sets the specified node version",
-    optionMaybe "--lts"
+    option "--lts"
     |> alias "-l"
     |> desc "Ignores version and pulls down the latest LTS version",
-    optionMaybe "--current"
+    option "--current"
     |> alias "-c"
     |> desc "Ignores version and pulls down the latest Current version"
   )

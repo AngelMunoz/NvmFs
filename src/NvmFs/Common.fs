@@ -22,30 +22,42 @@ type NodeVerItem = {
 } with
 
   static member Decoder: Decoder<NodeVerItem> =
-    fun person ->
+    fun nodeVersion ->
+
+      let ltsDecoder lts =
+
+        match Required.Property.get ("lts", Required.boolean) lts with
+        | Ok _ -> Ok None
+        | Error _ -> Required.Property.get ("lts", Optional.string) lts
 
       result {
         let! version =
-          person |> Required.Property.get("version", Required.string)
+          nodeVersion |> Required.Property.get("version", Required.string)
 
-        let! date = person |> Required.Property.get("date", Required.string)
-        let! files = person |> Required.Property.list("files", Required.string)
-        let! npm = person |> Optional.Property.get("npm", Required.string)
+        let! date =
+          nodeVersion |> Required.Property.get("date", Required.string)
 
-        let! v8 = person |> Required.Property.get("v8", Required.string)
-        let! uv = person |> Optional.Property.get("uv", Required.string)
-        let! zlib = person |> Optional.Property.get("zlib", Required.string)
+        let! files =
+          nodeVersion |> Required.Property.list("files", Required.string)
+
+        let! npm = nodeVersion |> Optional.Property.get("npm", Required.string)
+
+        let! v8 = nodeVersion |> Required.Property.get("v8", Required.string)
+        let! uv = nodeVersion |> Optional.Property.get("uv", Required.string)
+
+        let! zlib =
+          nodeVersion |> Optional.Property.get("zlib", Required.string)
 
         let! openssl =
-          person |> Optional.Property.get("openssl", Required.string)
+          nodeVersion |> Optional.Property.get("openssl", Required.string)
 
         let! modules =
-          person |> Optional.Property.get("modules", Required.string)
+          nodeVersion |> Optional.Property.get("modules", Required.string)
 
-        let! lts = person |> Required.Property.get("lts", Optional.string)
+        let! lts = ltsDecoder nodeVersion
 
         let! security =
-          person |> Required.Property.get("security", Required.boolean)
+          nodeVersion |> Required.Property.get("security", Required.boolean)
 
         return {
           version = version

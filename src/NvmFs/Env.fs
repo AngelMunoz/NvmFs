@@ -24,8 +24,11 @@ module Env =
           .SeparatorColor(Color.Yellow)
           .RootColor(Color.Yellow)
 
-      AnsiConsole.MarkupLineInterpolated
-        $"[yellow]%%{Common.EnvVars.NvmFsNode}%%[/] is already set to: {path}"
+      AnsiConsole.MarkupInterpolated
+        $"[yellow]%%{Common.EnvVars.NvmFsNode}%%[/] is already set to: "
+
+      AnsiConsole.Write path
+      AnsiConsole.Write('\n')
 
       Ok()
     | None ->

@@ -19,33 +19,21 @@ module Actions =
       parsed
 
   let private validateVersionGroup
-    (version: string option, lts: bool option, current: bool option)
+    (version: string option, lts: bool, current: bool)
     =
     if
-      [ version.IsSome; lts.IsSome; current.IsSome ]
-      |> List.filter id
-      |> List.length > 1
+      [ version.IsSome; lts; current ] |> List.filter id |> List.length > 1
     then
       failwith "Can only have one of 'version', '--lts' or '--current'."
 
   let private getInstallType
-    (isLts: bool option)
-    (isCurrent: bool option)
+    (isLts: bool)
+    (isCurrent: bool)
     (version: string option)
     : Result<InstallType, string> =
 
     match isLts, isCurrent, version with
-    | Some lts, None, None ->
-      if lts then
-        Ok LTS
-      else
-        Error "No valid version was presented"
-    | None, Some current, None ->
-      if current then
-        Ok Current
-      else
-        Error "No valid version was presented"
-    | None, None, Some version ->
+    | _, _, Some version ->
       match version.Split(".") with
       | [| major |] ->
         if validateVersion major then
@@ -67,6 +55,8 @@ module Actions =
         else
           Error $"{version} is not a valid node version"
       | _ -> Error $"{version} is not a valid node version"
+    | true, _, _ -> Ok LTS
+    | _, true, _ -> Ok Current
     | _ ->
       Error
         $"Use only one of --lts 'boolean', --current 'boolean', or --version 'string'"
@@ -120,12 +110,8 @@ module Actions =
   }
 
   let Install
-    (
-      version: string option,
-      lts: bool option,
-      current: bool option,
-      isDefault: bool
-    ) =
+    (version: string option, lts: bool, current: bool, isDefault: bool)
+    =
     task {
       validateVersionGroup(version, lts, current)
       do! runPreInstallChecks()
@@ -154,7 +140,7 @@ module Actions =
           }
           |> TaskResult.mapError(fun error ->
             match error with
-            | VersionNotFound version -> "[red]{version}[/] not found"
+            | VersionNotFound version -> $"[red]{version}[/] not found"
             | FailedToSetDefault msg ->
               $"[red]We could not set {install.asString} as default: {msg}[/]"
             | PlatformError ->
@@ -189,7 +175,7 @@ module Actions =
       |> Result.mapError(fun err -> UseError.FailedToSetDefault err.Value)
   }
 
-  let Use(version: string option, lts: bool option, current: bool option) = task {
+  let Use(version: string option, lts: bool, current: bool) = task {
     validateVersionGroup(version, lts, current)
     AnsiConsole.MarkupLine $"[yellow]Checking local versions[/]"
 
@@ -269,7 +255,7 @@ module Actions =
   let Uninstall(version: string option) = task {
     let versions = IO.getIndex()
 
-    match getInstallType None None version with
+    match getInstallType false false version with
     | Ok install ->
       let version = Common.getVersionItem versions install
 
@@ -358,15 +344,13 @@ module Actions =
         let localVersion =
           localVersions |> Array.tryItem i |> Option.defaultValue ""
 
-        table.AddRow(
-          [|
-            markCurrent localVersion
-            if remoteVersions.Length > 0 then
-              markCurrent(
-                remoteVersions |> Array.tryItem i |> Option.defaultValue ""
-              )
-          |]
-        )
+        table.AddRow [|
+          markCurrent localVersion
+          if remoteVersions.Length > 0 then
+            markCurrent(
+              remoteVersions |> Array.tryItem i |> Option.defaultValue ""
+            )
+        |]
         |> ignore
 
       table.Caption <-
