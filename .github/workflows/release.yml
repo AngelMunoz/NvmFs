@@ -1,0 +1,200 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+      exists: ${{ steps.check_tag.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Extract Release Data
+        id: extract
+        run: |
+          VERSION_LINE=$(grep -n "^## \[[0-9]" CHANGELOG.md | head -n 1)
+
+          if [ -z "$VERSION_LINE" ]; then
+            echo "No version found in CHANGELOG.md"
+            exit 1
+          fi
+
+          LINE_NUM=$(echo "$VERSION_LINE" | cut -d: -f1)
+          VERSION=$(echo "$VERSION_LINE" | sed -E 's/.*## \[([^]]+)\].*/\1/')
+
+          echo "Found version: $VERSION at line $LINE_NUM"
+
+          NEXT_HEADER_LINE=$(tail -n +$((LINE_NUM + 1)) CHANGELOG.md | grep -n "^## \[" | head -n 1 | cut -d: -f1)
+
+          if [ -z "$NEXT_HEADER_LINE" ]; then
+            BODY=$(tail -n +$((LINE_NUM + 1)) CHANGELOG.md)
+          else
+            BODY=$(tail -n +$((LINE_NUM + 1)) CHANGELOG.md | head -n $((NEXT_HEADER_LINE - 1)))
+          fi
+
+          echo "$BODY" > RELEASE_NOTES.md
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if Tag Exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.extract.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.extract.outputs.version }} already exists."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Keep Release Notes
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: RELEASE_NOTES.md
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.exists == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs-on: ubuntu-latest
+            rid: linux-x64
+          - runs-on: ubuntu-latest
+            rid: linux-arm64
+          - runs-on: macos-latest
+            rid: osx-x64
+          - runs-on: macos-latest
+            rid: osx-arm64
+          - runs-on: windows-latest
+            rid: win-x64
+          - runs-on: windows-latest
+            rid: win-arm64
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 11.0.x
+
+      # Native AOT standalone binaries with the changelog version stamped
+      # in, so the lazy user agent and the binaries report the released version.
+      - name: Native AOT toolchain
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish (Native AOT)
+        shell: bash
+        run: >
+          dotnet publish src/NvmFs/NvmFs.fsproj -c Release -f net11.0
+          -r ${{ matrix.rid }}
+          -p:PublishSingleFile=true -p:SelfContained=true
+          -p:PublishAot=true -p:InvariantGlobalization=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=embedded -p:TreatWarningsAsErrors=true
+          -p:Version=${{ needs.prepare.outputs.version }}
+          -o publish/${{ matrix.rid }}
+
+      - name: Package (zip)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd publish/${{ matrix.rid }}
+          zip -r "../../nvmfs-${{ needs.prepare.outputs.version }}-${{ matrix.rid }}.zip" .
+
+      - name: Package (zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path publish/${{ matrix.rid }}/* `
+            -DestinationPath "nvmfs-${{ needs.prepare.outputs.version }}-${{ matrix.rid }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.rid }}
+          path: nvmfs-*
+
+  # NuGet trusted publishing (OIDC): no long-lived API-key secret, but the
+  # nuget.org username goes in the NUGET_USER repo secret (same as
+  # MVUish.Avalonia). One-time setup on nuget.org: register this
+  # repository plus this workflow file as a trusted publisher for the
+  # nvmfs package.
+  nuget:
+    needs: prepare
+    if: needs.prepare.outputs.exists == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 11.0.x
+
+      - name: Pack
+        shell: bash
+        run: >
+          dotnet pack src/NvmFs/NvmFs.fsproj
+          -p:Version=${{ needs.prepare.outputs.version }}
+          -o nupkg
+
+      - name: NuGet login (trusted publishing)
+        uses: NuGet/login@v1
+        id: nuget_login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push
+        shell: bash
+        run: >
+          dotnet nuget push "nupkg/*.nupkg"
+          --api-key ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tool-package
+          path: nupkg/*.nupkg
+
+  release:
+    needs: [prepare, build, nuget]
+    if: needs.prepare.outputs.exists == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # The checkout cleans the workspace, so it runs before the
+      # artifact download; the other way around it deletes the files
+      # the release body reads.
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.prepare.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: v${{ needs.prepare.outputs.version }}
+          body_path: artifacts/RELEASE_NOTES.md
+          draft: false
+          prerelease: ${{ contains(needs.prepare.outputs.version, '-rc') || contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-alpha') }}
+          files: |
+            artifacts/nvmfs-*
+            artifacts/*.nupkg

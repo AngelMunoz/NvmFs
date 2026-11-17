@@ -12,7 +12,7 @@ type NodeVerItem = {
   date: string
   files: string list
   npm: string option
-  v8: string
+  v8: string option
   uv: string option
   zlib: string option
   openssl: string option
@@ -42,7 +42,7 @@ type NodeVerItem = {
 
         let! npm = nodeVersion |> Optional.Property.get("npm", Required.string)
 
-        let! v8 = nodeVersion |> Required.Property.get("v8", Required.string)
+        let! v8 = nodeVersion |> Optional.Property.get("v8", Required.string)
         let! uv = nodeVersion |> Optional.Property.get("uv", Required.string)
 
         let! zlib =

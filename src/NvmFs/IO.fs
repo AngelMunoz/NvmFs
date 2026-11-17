@@ -13,7 +13,6 @@ module IO =
   open System.Formats.Tar
   open System.Diagnostics
   open FsToolkit.ErrorHandling
-  open JDeck
   open System.Text.Json
   open Spectre.Console
 
@@ -130,23 +129,29 @@ module IO =
   let getIndex() =
     let path = Common.getHome()
 
-    let content =
-      try
-        File.ReadAllBytes(Path.Combine(path, "index.json"))
-      with _ ->
-        Array.empty<byte>
+    try
+      let content = File.ReadAllBytes(Path.Combine(path, "index.json"))
+
+      use doc = JsonDocument.Parse(content)
+
+      let items =
+        [|
+          for item in doc.RootElement.EnumerateArray() do
+            NodeVerItem.Decoder item
+        |]
+        |> Array.sequenceResultM
 
 
-    match
-      Decoding.auto<NodeVerItem[]>(
-        content,
-        JsonSerializerOptions() |> Codec.useDecoder NodeVerItem.Decoder
-      )
-    with
-    | Ok res -> res
-    | Error err ->
+      match items with
+      | Ok res -> res
+      | Error err ->
+        AnsiConsole.MarkupLineInterpolated
+          $"[red]Failed to decode index.json:[/] [bold]{err.message}[/] - [bold yellow]Raw Value: {err.rawValue}[/]"
+
+        [||]
+    with ex ->
       AnsiConsole.MarkupLineInterpolated
-        $"[red]Failed to decode index.json:[/] [bold]{err.message}[/] - [bold yellow]Raw Value: {err.rawValue}[/]"
+        $"[red]Failed to read index.json:[/] [bold]{ex.Message}[/]"
 
       [||]
 

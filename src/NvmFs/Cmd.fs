@@ -88,75 +88,74 @@ module Actions =
         )
     }
 
-  let private downloadNode (version: NodeVerItem) (setDefault: bool) = taskResult {
-    let! _, os, arch =
-      Common.getOsArchCodename version |> Result.setError PlatformError
+  let private downloadNode (version: NodeVerItem) (setDefault: bool) =
+    taskResult {
+      let! _, os, arch =
+        Common.getOsArchCodename version |> Result.setError PlatformError
 
-    let! node =
-      AnsiConsole
-        .Status()
-        .StartAsync(
-          $"Downloading Node [yellow]{version.version}[/]",
-          fun _ -> Network.downloadNode version.version os arch
-        )
-      |> TaskResult.mapError(fun error -> FailedToSetDefault error.Message)
+      let! node =
+        AnsiConsole
+          .Status()
+          .StartAsync(
+            $"Downloading Node [yellow]{version.version}[/]",
+            fun _ -> Network.downloadNode version.version os arch
+          )
+        |> TaskResult.mapError(fun error -> FailedToSetDefault error.Message)
 
-    if setDefault then
-      do!
-        setVersionAsDefault version.version os
-        |> Result.mapError(fun err -> FailedToSetDefault err.Value)
+      if setDefault then
+        do!
+          setVersionAsDefault version.version os
+          |> Result.mapError(fun err -> FailedToSetDefault err.Value)
 
-    return node
-  }
+      return node
+    }
 
   let Install
     (version: string option, lts: bool, current: bool, isDefault: bool)
-    =
-    task {
-      validateVersionGroup(version, lts, current)
-      do! runPreInstallChecks()
+    = task {
+    validateVersionGroup(version, lts, current)
+    do! runPreInstallChecks()
 
-      let versions = IO.getIndex()
+    let versions = IO.getIndex()
 
-      match getInstallType lts current version, isDefault with
-      | Ok install, setAsDefault ->
+    match getInstallType lts current version, isDefault with
+    | Ok install, setAsDefault ->
 
-        let! installResult =
-          taskResult {
-            let! version =
-              Common.getVersionItem versions install
-              |> Result.requireSome(VersionNotFound install.asString)
+      let! installResult =
+        taskResult {
+          let! version =
+            Common.getVersionItem versions install
+            |> Result.requireSome(VersionNotFound install.asString)
 
-            do! downloadNode version setAsDefault |> TaskResult.ignore
+          do! downloadNode version setAsDefault |> TaskResult.ignore
 
-            AnsiConsole.MarkupLine
-              $"[green]Node version {version.version} installed[/]"
+          AnsiConsole.MarkupLine
+            $"[green]Node version {version.version} installed[/]"
 
-            if setAsDefault then
-              AnsiConsole.MarkupLine
-                $"[green]Set {version.version} as default[/]"
+          if setAsDefault then
+            AnsiConsole.MarkupLine $"[green]Set {version.version} as default[/]"
 
-            return ()
-          }
-          |> TaskResult.mapError(fun error ->
-            match error with
-            | VersionNotFound version -> $"[red]{version}[/] not found"
-            | FailedToSetDefault msg ->
-              $"[red]We could not set {install.asString} as default: {msg}[/]"
-            | PlatformError ->
-              $"[red]We were unable to get the current platform and architecture[/]")
+          return ()
+        }
+        |> TaskResult.mapError(fun error ->
+          match error with
+          | VersionNotFound version -> $"[red]{version}[/] not found"
+          | FailedToSetDefault msg ->
+            $"[red]We could not set {install.asString} as default: {msg}[/]"
+          | PlatformError ->
+            $"[red]We were unable to get the current platform and architecture[/]")
 
-        match installResult with
-        | Ok() ->
-          AnsiConsole.MarkupLine ""
-          return 0
-        | Error err ->
-          AnsiConsole.Markup err
-          return 1
-      | Error err, _ ->
-        AnsiConsole.MarkupLine $"[red]{err}[/]"
+      match installResult with
+      | Ok() ->
+        AnsiConsole.MarkupLine ""
+        return 0
+      | Error err ->
+        AnsiConsole.Markup err
         return 1
-    }
+    | Error err, _ ->
+      AnsiConsole.MarkupLine $"[red]{err}[/]"
+      return 1
+  }
 
   let findAndSetVersion version = result {
     let! _, os, _ =

@@ -11,8 +11,12 @@ open Spectre.Console
 open FsToolkit.ErrorHandling
 
 module Network =
-  [<Literal>]
-  let UserAgent = "NvmFs/1.0.1"
+  let UserAgent =
+    lazy
+      (let version =
+        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+
+       $"NvmFs/{version}")
 
   let http = lazy (new HttpClient(Timeout = TimeSpan.FromSeconds(5.0)))
 
@@ -26,7 +30,7 @@ module Network =
             "-Uri"
             url
             "-UserAgent"
-            UserAgent
+            UserAgent.Value
             "-OutFile"
             fileDestination
           |]
@@ -50,7 +54,7 @@ module Network =
             "--compressed"
             "--fail"
             "-A"
-            UserAgent
+            UserAgent.Value
             "-o"
             fileDestination
           |]
@@ -72,7 +76,7 @@ module Network =
           [|
             "--compression=auto"
             "-U"
-            UserAgent
+            UserAgent.Value
             "-O"
             fileDestination
             url
